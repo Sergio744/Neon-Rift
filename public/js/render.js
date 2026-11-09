@@ -20,9 +20,9 @@ export function makeSky() {
   c.height = 450;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 450);
-  grad.addColorStop(0, '#120d2a');
-  grad.addColorStop(0.55, '#221a45');
-  grad.addColorStop(1, '#3a2356');
+  grad.addColorStop(0, '#070514');
+  grad.addColorStop(0.5, '#150d30');
+  grad.addColorStop(1, '#2b1348');
   g.fillStyle = grad;
   g.fillRect(0, 0, 800, 450);
   // Dither the gradient into bands so it reads as pixel art.
@@ -36,29 +36,88 @@ export function makeSky() {
     }
   }
   g.putImageData(img, 0, 0);
-  let seed = 7;
+  let seed = 19;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 105; i++) {
     const x = Math.floor(rnd() * 800);
-    const y = Math.floor(rnd() * 260);
-    g.fillStyle = rnd() < 0.2 ? '#ffffff' : rnd() < 0.5 ? '#8d86c6' : '#5d5690';
+    const y = Math.floor(rnd() * 290);
+    const pick = rnd();
+    g.fillStyle = pick < 0.18 ? '#ffffff' : pick < 0.42 ? '#3ee6ff' : pick < 0.62 ? '#ff4d9d' : '#695ea8';
     g.fillRect(x, y, 1, 1);
-    if (rnd() < 0.06) {
-      g.fillStyle = 'rgba(255,255,255,0.35)';
+    if (rnd() < 0.08) {
+      g.fillStyle = pick < 0.5 ? 'rgba(62,230,255,0.35)' : 'rgba(255,77,157,0.35)';
       g.fillRect(x - 1, y, 3, 1);
       g.fillRect(x, y - 1, 1, 3);
     }
   }
-  g.fillStyle = '#3a3370';
-  pxCircle(g, 660, 70, 22);
-  g.fillStyle = '#4d4590';
-  pxCircle(g, 656, 66, 18);
-  g.fillStyle = '#3a3370';
-  pxCircle(g, 650, 60, 4);
-  pxCircle(g, 664, 76, 3);
+
+  // Distant cyberpunk skyline silhouette along the horizon.
+  const towers = [
+    [0, 386, 46], [42, 362, 38], [78, 392, 52], [128, 348, 42], [168, 378, 56],
+    [222, 358, 36], [256, 390, 64], [318, 368, 44], [360, 382, 80], [438, 364, 48],
+    [484, 388, 58], [540, 352, 42], [580, 376, 54], [632, 344, 46], [676, 372, 62], [736, 356, 64],
+  ];
+  for (const [tx, ty, tw] of towers) {
+    g.fillStyle = '#120b28';
+    g.fillRect(tx, ty, tw, 450 - ty);
+    g.fillStyle = tx % 3 === 0 ? 'rgba(62,230,255,0.28)' : 'rgba(255,77,157,0.25)';
+    g.fillRect(tx, ty, tw, 1);
+    for (let wy = ty + 6; wy < 440; wy += 9) {
+      for (let wx = tx + 5; wx < tx + tw - 6; wx += 8) {
+        if (rnd() < 0.35) {
+          g.fillStyle = rnd() < 0.5 ? 'rgba(62,230,255,0.32)' : 'rgba(255,77,157,0.3)';
+          g.fillRect(wx, wy, 2, 2);
+        }
+      }
+    }
+  }
+
+  // Dimensional Neon Rift slashing across the upper-right sky.
+  const spine = [
+    [594, 24], [608, 36], [616, 49], [631, 61], [640, 76], [656, 89], [666, 104], [682, 118],
+  ];
+  const segs = [];
+  for (let i = 0; i < spine.length - 1; i++) {
+    const [x0, y0] = spine[i];
+    const [x1, y1] = spine[i + 1];
+    for (let k = 0; k < 8; k++) {
+      const f = k / 8;
+      const t = (i + f) / (spine.length - 1);
+      const bulge = Math.sin(t * Math.PI);
+      segs.push([Math.round(x0 + (x1 - x0) * f), Math.round(y0 + (y1 - y0) * f), bulge]);
+    }
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#3d1666';
+    pxCircle(g, rx, ry, Math.max(2, Math.round(13 * b)));
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#b5257a';
+    pxCircle(g, rx, ry, Math.max(1, Math.round(8 * b)));
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#ff4d9d';
+    pxCircle(g, rx, ry, Math.max(1, Math.round(5 * b)));
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#3ee6ff';
+    pxCircle(g, rx, ry, Math.max(1, Math.round(3 * b)));
+  }
+  g.fillStyle = '#ffffff';
+  for (let i = 0; i < spine.length - 1; i++) {
+    pxLine(g, spine[i][0], spine[i][1], spine[i + 1][0], spine[i + 1][1]);
+  }
+  // Floating energy shards around the rift.
+  for (const [sx, sy, col] of [
+    [580, 42, '#3ee6ff'], [648, 46, '#ff4d9d'], [602, 74, '#ff4d9d'],
+    [676, 78, '#3ee6ff'], [628, 108, '#3ee6ff'], [694, 106, '#ff4d9d'],
+  ]) {
+    g.fillStyle = col;
+    g.fillRect(sx, sy, 2, 2);
+  }
   return c;
 }
 

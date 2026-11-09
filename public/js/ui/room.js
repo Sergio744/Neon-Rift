@@ -1,5 +1,6 @@
 import { PLAYER_COLORS } from '/shared/constants.js';
 import { GROUP_MODES, MODES, TEAM_COLORS, TEAM_NAMES } from '/shared/modes.js';
+import { tr } from '../i18n.js';
 import { chips, poolPicker, settingRow } from './controls.js';
 
 // Online room panels driven by the server `room` info: the waiting room (duel and group lobby),
@@ -62,7 +63,7 @@ export function createRoomUi({ game, net, maps, pools, onCopy }) {
   const fold = $('#btn-fold');
   const setFolded = (on) => {
     $('#waiting').classList.toggle('folded', on);
-    fold.textContent = on ? 'SHOW' : 'HIDE';
+    fold.textContent = on ? tr('show') : tr('hide');
     fold.setAttribute('aria-expanded', String(!on));
   };
   fold.addEventListener('click', () => setFolded(!$('#waiting').classList.contains('folded')));
@@ -112,10 +113,10 @@ export function createRoomUi({ game, net, maps, pools, onCopy }) {
     const group = isGroup(msg);
     const host = !group || msg.host === game.slot;
     const title = $('#w-title');
-    title.textContent = group ? `${MODES[msg.mode].name}` : msg.pub ? 'FINDING AN OPPONENT' : 'WAITING FOR OPPONENT';
+    title.textContent = group ? `${MODES[msg.mode].name}` : msg.pub ? tr('findingOpponent') : tr('waitingOpponent');
     title.classList.toggle('dots', !group);
     const n = msg.names.filter(Boolean).length;
-    setText($('#w-count'), group ? `${n}/${msg.max} PLAYERS` : '');
+    setText($('#w-count'), group ? `${n}/${msg.max} ${tr('players')}` : '');
     setText($('#w-code'), msg.code);
     $('#w-players').classList.toggle('hidden', !group);
     if (group) renderPlayers(msg);
@@ -124,11 +125,11 @@ export function createRoomUi({ game, net, maps, pools, onCopy }) {
     modeRow.classList.toggle('hidden', !group);
     if (group) {
       const items = GROUP_MODES.map((id) => ({ id, name: MODES[id].name }));
-      settingRow(modeRow, 'MODE', items, msg.mode, (mode) => net.send({ t: 'setopts', mode }), !host);
+      settingRow(modeRow, tr('modeLabel'), items, msg.mode, (mode) => net.send({ t: 'setopts', mode }), !host);
     }
-    settingRow($('#w-maps'), 'MAP', mapItems(), msg.map, (id) => net.send({ t: 'setmap', map: id }), !host);
+    settingRow($('#w-maps'), tr('mapLabel'), mapItems(), msg.map, (id) => net.send({ t: 'setmap', map: id }), !host);
     const goals = MODES[msg.mode].goals.map((g) => ({ id: g, name: String(g) }));
-    const goalLabel = { duel: 'POINTS TO WIN', ffa: 'KILLS TO WIN', teams: 'TEAM KILLS' }[msg.mode];
+    const goalLabel = { duel: tr('pointsToWin'), ffa: tr('killsToWin'), teams: tr('teamKills') }[msg.mode];
     settingRow($('#w-goal'), goalLabel, goals, msg.goal, (goal) => net.send({ t: 'setopts', goal }), !host);
     poolPicker($('#w-pool'), pools(), msg.pool, (pool) => net.send({ t: 'setopts', pool }), !host);
 
@@ -167,7 +168,7 @@ export function createRoomUi({ game, net, maps, pools, onCopy }) {
     } else {
       for (let s = 0; s < 2; s++) fill(sides[s], msg.names[s] || '...', msg.scores[s], PLAYER_COLORS[s], s === game.slot);
     }
-    const goal = msg.st === 'waiting' ? 'WARM-UP - NOTHING COUNTS' : `FIRST TO ${msg.goal}`;
+    const goal = msg.st === 'waiting' ? tr('warmup') : `${tr('firstTo')} ${msg.goal}`;
     setText($('#goal-text'), `${isGroup(msg) && msg.st !== 'waiting' ? `${MODES[msg.mode].name} - ` : ''}${goal}`);
     const m = maps().find((x) => x.id === msg.map);
     setText($('#map-text'), m ? m.name : msg.map);

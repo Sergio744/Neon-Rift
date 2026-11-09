@@ -1,11 +1,11 @@
 :root {
-  --bg: #0e0b1c;
+  --bg: #080614;
   --ink: #f4f1ff;
   --dim: #9c95c4;
-  --panel: #1a1533;
-  --panel-2: #241d45;
-  --line: #3a3166;
-  --p0: #ff7b22;
+  --panel: #14102b;
+  --panel-2: #1f1840;
+  --line: #3c2f70;
+  --p0: #3ee6ff;
   --p1: #ff4d9d;
   --accent: #3ee6ff;
   --good: #45d483;
@@ -1052,6 +1052,28 @@ kbd {
   width: min(340px, 100%);
 }
 
+.menu-top {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -10px;
+}
+
+.lang-btn {
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  background: #0d0920;
+  border: 1px solid var(--line);
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.lang-btn:hover {
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+
 #logo {
   width: 100%;
   image-rendering: pixelated;
@@ -1124,20 +1146,20 @@ input:focus {
 
 .btn.primary {
   background: var(--p0);
-  color: #1a0e05;
+  color: #05131a;
 }
 
 .btn.primary:hover {
-  background: #ff9546;
+  background: #7cf0ff;
 }
 
 .btn.solo {
-  background: var(--accent);
-  color: #06121a;
+  background: var(--p1);
+  color: #1c0511;
 }
 
 .btn.solo:hover {
-  background: #7af0ff;
+  background: #ff7ab8;
 }
 
 .btn.coop {

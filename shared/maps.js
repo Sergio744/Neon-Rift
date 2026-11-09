@@ -2,6 +2,7 @@ import { CELL, GRID_H, GRID_W } from './constants.js';
 import { buildCanyon } from './maps/canyon.js';
 import { buildLanding } from './maps/landing.js';
 import { buildMine } from './maps/mine.js';
+import { buildNeon } from './maps/neon.js';
 import { buildOutpost } from './maps/outpost.js';
 import { Painter, S, bedrock } from './maps/painter.js';
 import { buildRidge } from './maps/ridge.js';
@@ -23,6 +24,21 @@ function buildFlat(P, rnd) {
 // Spawns are [x, scanY] in world px: the player stands on the first ground below scanY.
 // The first two are the match start positions for slot 0 and slot 1.
 export const MAPS = {
+  neon: {
+    name: 'NEON CITY',
+    crystals: false,
+    build: buildNeon,
+    spawns: [
+      [160, 480],
+      [1440, 480],
+      [800, 560],
+      [472, 370],
+      [1128, 370],
+      [800, 210],
+      [560, 740],
+      [1040, 740],
+    ],
+  },
   landing: {
     name: 'LANDING PAGE',
     crystals: false,

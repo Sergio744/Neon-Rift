@@ -5,6 +5,7 @@ import { POOLS, POOL_IDS } from '/shared/weapons.js';
 import { Sfx } from './audio.js';
 import { Fx, drawText } from './fx.js';
 import { ClientGame } from './game.js';
+import { applyDomI18n, onLangChange, toggleLang, tr } from './i18n.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { SoloServer } from './solo.js';
@@ -108,7 +109,7 @@ async function copyInvite() {
   const link = inviteLink(code);
   try {
     await navigator.clipboard.writeText(link);
-    toast('INVITE LINK COPIED');
+    toast(tr('inviteCopied'));
   } catch {
     toast(link);
   }
@@ -138,7 +139,7 @@ ui.code.addEventListener('keydown', (e) => {
 function join(code) {
   code = String(code || '').toUpperCase().trim();
   if (code.length !== 4) {
-    toast('ENTER A 4-LETTER CODE');
+    toast(tr('enterCode'));
     return;
   }
   sfx.unlock();
@@ -186,7 +187,7 @@ function loadBest() {
 
 function renderBest() {
   const best = loadBest();
-  $('#solo-best').textContent = best ? `BEST SCORE ${best}` : '';
+  $('#solo-best').textContent = best ? `${tr('bestScore')} ${best}` : '';
 }
 
 function flash(text, sub, ms) {
@@ -641,7 +642,7 @@ input.on('board', (on) => {
 // After a dropped connection, try to get back into the same room once the socket is back.
 let rejoinCode = null;
 net.on('open', () => {
-  ui.conn.textContent = 'CONNECTED';
+  ui.conn.textContent = tr('connected');
   ui.conn.classList.remove('bad');
   if (rejoinCode) {
     net.send({ t: 'join', name: playerName(), code: rejoinCode });
@@ -649,7 +650,7 @@ net.on('open', () => {
   }
 });
 net.on('close', () => {
-  ui.conn.textContent = 'RECONNECTING...';
+  ui.conn.textContent = tr('reconnecting');
   ui.conn.classList.add('bad');
   if (game.active && !solo.active) {
     rejoinCode = (mode === 'room' ? room?.code : coop?.code) ?? null;
@@ -719,10 +720,10 @@ net.on('lobby', () => {
   const lg = $('#logo').getContext('2d');
   lg.imageSmoothingEnabled = false;
   lg.clearRect(0, 0, 200, 40);
-  drawText(lg, 'NEON', 56, 6, PLAYER_COLORS[2], 3);
+  drawText(lg, 'NEON', 56, 6, PLAYER_COLORS[0], 3);
   const slash = [
-    [104, 5, PLAYER_COLORS[2]],
-    [103, 9, PLAYER_COLORS[2]],
+    [104, 5, PLAYER_COLORS[0]],
+    [103, 9, PLAYER_COLORS[0]],
     [101, 13, '#f4f1ff'],
     [105, 16, PLAYER_COLORS[1]],
     [103, 20, '#f4f1ff'],
@@ -737,6 +738,13 @@ net.on('lobby', () => {
   }
   drawText(lg, 'RIFT', 148, 6, PLAYER_COLORS[1], 3);
 })();
+
+$('#btn-lang')?.addEventListener('click', toggleLang);
+onLangChange(() => {
+  ui.conn.textContent = net.open ? tr('connected') : tr('connecting');
+  renderBest();
+});
+applyDomI18n();
 
 // ---------- per-frame HUD ----------
 

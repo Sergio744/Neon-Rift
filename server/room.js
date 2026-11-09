@@ -22,7 +22,7 @@ export class Room {
     this.mode = MODES[mode] ? mode : 'duel';
     this.group = this.mode !== 'duel';
     this.max = MODES[this.mode].max;
-    this.mapId = MAPS[map] ? map : this.group ? 'canyon' : 'landing';
+    this.mapId = MAPS[map] ? map : this.group ? 'canyon' : 'neon';
     this.goal = MODES[this.mode].goals.includes(goal) ? goal : MODES[this.mode].goal;
     this.clients = new Array(this.max).fill(null);
     this.teams = new Array(this.max).fill(-1); // team of each slot in 'teams', -1 elsewhere

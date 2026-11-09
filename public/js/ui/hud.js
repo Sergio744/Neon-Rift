@@ -7,7 +7,7 @@ import { LOCK } from '../sprites-tools.js';
 // armory countdown and kill feed.
 
 const $ = (sel) => document.querySelector(sel);
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '[', ']'];
 const keyOf = (bar, w) => (w === W.builder ? 'B' : KEYS[bar.nums.indexOf(w)] ?? '');
 
 function setText(el, v) {

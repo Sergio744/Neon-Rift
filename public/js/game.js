@@ -34,6 +34,8 @@ export class ClientGame {
     this.fx = fx;
     this.sfx = sfx;
     this.view = new TerrainView();
+    this.menuBackdrop = new TerrainView();
+    this.menuBackdrop.setTerrain(buildMap('neon', 42).terrain);
     this.sky = makeSky();
     this.sync = new TerrainSync(this);
     this.active = false;
@@ -294,7 +296,13 @@ export class ClientGame {
     this.time += dt;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     ctx.drawImage(this.sky, 0, 0);
-    if (!this.active) return;
+    if (!this.active) {
+      ctx.save();
+      ctx.globalAlpha = 0.68;
+      ctx.drawImage(this.menuBackdrop.canvas, 0, 0);
+      ctx.restore();
+      return;
+    }
     const me = this.me;
     const meOn = !me.dead && this.present[this.slot];
     const mx = this.prev.x + (me.x - this.prev.x) * alpha + this.err.x;
