@@ -1,0 +1,39 @@
+name: ✨ Feature, Weapon, or Map Idea / Idée (Arme, Carte, Mode)
+description: Propose a new weapon, destructible map, mutator, or community feature (EN / FR)
+title: "[Idea]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share your idea for **Neon Rift**! You can write in **English** or **French**.
+        Proposez votre idée pour **Neon Rift** ! Vous pouvez écrire en **français** ou en **anglais**.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category / Catégorie
+      options:
+        - 🔫 New Weapon / Tool (Nouvelle arme / outil)
+        - 🗺️ New Destructible Map (Nouvelle carte)
+        - 🎮 Game Mode / Mutator (Mode de jeu / mutateur)
+        - 🎨 Visual FX / Audio / UI (Effets néon / son / interface)
+        - 🌐 Community / Server / QoL (Communauté / serveur)
+    validations:
+      required: true
+
+  - type: textarea
+    id: pitch
+    attributes:
+      label: Idea & Gameplay Impact / Concept & intérêt en jeu
+      description: How does it work? How does it interact with destructible terrain or other players?
+      placeholder: "A Gravity Grenade that pulls loose sand, debris, and nearby players toward its center for 1.5s..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to implement this in a Pull Request! / Je souhaite coder cette fonctionnalité via une PR !

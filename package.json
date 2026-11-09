@@ -1,0 +1,26 @@
+{
+  "name": "neon-rift",
+  "version": "0.1.0",
+  "description": "Open-source community stickman shooter on destructible falling-sand pixel maps. Inspired by Stick Duel.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sergio744/Neon-Rift.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Sergio744/Neon-Rift/issues"
+  },
+  "homepage": "https://github.com/Sergio744/Neon-Rift#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
