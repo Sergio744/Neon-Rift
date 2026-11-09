@@ -161,6 +161,7 @@ export class Game {
       if (a.k === 'fire') this.fire(slot, a, inp.s, lag, inp.k | 0);
       else if (a.k === 'nade') this.throwNade(slot, a, inp.s);
       else if (a.k === 'det') this.detonateC4(slot);
+      else if (a.k === 'blink_act') this.activateBlink(slot);
       else if (a.k === 'melee') this.melee(slot, a.a);
       else if (a.k === 'bump') this.brush(slot, a.d);
     }

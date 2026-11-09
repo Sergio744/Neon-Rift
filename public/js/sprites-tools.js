@@ -120,7 +120,76 @@ export const TOOL_GUNS = [
     [16, 3],
     [23, 3.5],
   ),
+  // 14 Blink Disc: split-rail phase launcher cradling a glowing cyan disc.
+  gun(
+    [
+      '..kkkkkkkkkkkkkkkkkk..',
+      '.kddwwllllllllccccWck.',
+      'kkmmmmmmmmmmmmkccWWcck',
+      'kddmmmmmmmmmmmkccWWcck',
+      '.kkkkdkkkkbkkkkccccWck',
+      '....kdk..kbk...kkkkkk.',
+      '....kdk..kkk..........',
+      '....kkk...............',
+    ],
+    [5, 5],
+    [10, 5],
+    [20, 3],
+  ),
+  // 15 Prism Rifle: crystalline magenta/cyan ricochet rifle with twin focusing lenses.
+  gun(
+    [
+      '......kkkkkkk............',
+      '.....kpccWccpk...........',
+      '..kkkkkkkkkkkkkkkkkkkkkk.',
+      'kkppwwllllcpcpcpclllllcck',
+      'kPppmmmmmmcpcpcpcmmmmmWck',
+      'kkPPddddddkkkkkkkkkkkkkk.',
+      '.kkkkdkkkkbk.............',
+      '....kdk..kbk.............',
+      '....kkk..kkk.............',
+    ],
+    [5, 6],
+    [11, 6],
+    [24, 4],
+  ),
+  // 16 Vortex Orb: heavy dark-matter singularity cannon with violet containment coils.
+  gun(
+    [
+      '..kkkkkkkkkkkkkkkkkkk...',
+      '.kvvppwllllllllllppvvkk.',
+      'kkvvpmmmmmcvcvcmmmmpvvpk',
+      'kVvvpmmmmmvWvWvmmmmpvvWk',
+      'kkvvpdddddcvcvcddddpvvpk',
+      '.kkkkkdkkkkkbkkkkkkkkk..',
+      '.....kdk...kbk..........',
+      '.....kkk...kkk..........',
+    ],
+    [6, 6],
+    [12, 6],
+    [23, 3.5],
+  ),
 ];
+
+export const BLINK_DISC = make([
+  '..kkkk..',
+  '.kcccck.',
+  'kcWWWWck',
+  'kcWppWck',
+  'kcWWWWck',
+  '.kcccck.',
+  '..kkkk..',
+]);
+
+export const VORTEX_CORE = make([
+  '..kkkkk..',
+  '.kvvpvvk.',
+  'kvpkkkppk',
+  'kvkkWkkvk',
+  'kppkkkpvk',
+  '.kvvpvvk.',
+  '..kkkkk..',
+]);
 
 export const C4_CHARGE = make(['.kkkkk.', 'knNNNnk', 'kWkWkWk', 'knnnnnk', '.kkkkk.']);
 export const C4_LIGHT = make(['r']);

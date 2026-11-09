@@ -1,11 +1,11 @@
 import { GRID_H, GRID_W, MAT_DECOR, MAT_EMPTY, PHYS } from '/shared/constants.js';
 import { PALETTE } from '/shared/maps.js';
 import { CHUNK } from '/shared/terrain.js';
-import { BOMBLET as BOMBLET_P, PROJ } from '/shared/projectiles.js';
+import { BOMBLET as BOMBLET_P, PROJ, VORTEX_P } from '/shared/projectiles.js';
 import { WEAPONS } from '/shared/weapons.js';
 import { drawText, hexToRgb, pxCircle, pxLine, shade } from './fx.js';
 import { BOMBLET, CHUTE, CRATE, CRATE_CHUTE, GRENADE, GUNS, JETPACK, MIRV, ROCKET } from './sprites.js';
-import { AMMO_BOX, C4_CHARGE, PACK, QUAKE_SHELL } from './sprites-tools.js';
+import { AMMO_BOX, BLINK_DISC, C4_CHARGE, PACK, QUAKE_SHELL, VORTEX_CORE } from './sprites-tools.js';
 
 // Everything draws into the 800x450 backbuffer: 1 backbuffer px = 2 world px = 1 terrain cell.
 
@@ -610,6 +610,39 @@ export function drawProjectile(ctx, pr) {
       }
       ctx.drawImage(BOMBLET, Math.round(x - 2), Math.round(y - 2));
       break;
+    case PROJ.BLINK: {
+      drawRotated(ctx, BLINK_DISC, x, y, pr.t * 18);
+      ctx.fillStyle = Math.floor(pr.t * 20) % 2 === 0 ? '#3ee6ff' : '#ff4d9d';
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
+      break;
+    }
+    case PROJ.VORTEX: {
+      if (!pr.st) {
+        drawRotated(ctx, VORTEX_CORE, x, y, -pr.t * 12);
+        break;
+      }
+      const X = Math.round(x);
+      const Y = Math.round(y);
+      const rem = Math.max(0, (VORTEX_P.total - pr.t) / (VORTEX_P.total - VORTEX_P.flight));
+      const outerR = Math.max(5, Math.round(7 + rem * 7 + Math.sin(pr.t * 22) * 1.5));
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = '#c77dff';
+      pxCircle(ctx, X, Y, outerR);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = Math.floor(pr.t * 16) % 2 === 0 ? '#3ee6ff' : '#ff4d9d';
+      pxCircle(ctx, X, Y, Math.max(4, outerR - 3));
+      ctx.restore();
+      ctx.fillStyle = '#090614';
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          if (dx * dx + dy * dy <= 10) ctx.fillRect(X + dx, Y + dy, 1, 1);
+        }
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(X, Y, 1, 1);
+      break;
+    }
     default:
       break;
   }

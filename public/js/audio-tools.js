@@ -39,6 +39,35 @@ export const EXTRA = {
     this.noise({ f0: 700, f1: 160, type: 'lowpass', gain: 0.28 * s, decay: 0.09, pan });
     this.tone({ type: 'square', f0: 260, f1: 70, gain: 0.1 * s, decay: 0.06, pan });
   },
+  // 14 Blink Disc launch: crystalline phase shimmer.
+  shot14(pan, s) {
+    this.tone({ type: 'triangle', f0: 680, f1: 1960, gain: 0.14 * s, decay: 0.14, pan });
+    this.noise({ f0: 3600, f1: 1400, q: 2.2, gain: 0.12 * s, decay: 0.09, pan });
+  },
+  // 15 Prism Rifle: harmonic laser snap + glassy ricochet ring.
+  shot15(pan, s) {
+    this.tone({ type: 'sawtooth', f0: 1900, f1: 420, gain: 0.16 * s, decay: 0.18, pan });
+    this.tone({ type: 'sine', f0: 1320, f1: 2640, gain: 0.1 * s, decay: 0.14, pan, delay: 0.02 });
+    this.noise({ f0: 4800, f1: 1800, type: 'highpass', gain: 0.14 * s, decay: 0.08, pan });
+  },
+  // 16 Vortex Orb launch: sub-bass gravity pulse.
+  shot16(pan, s) {
+    this.tone({ type: 'sine', f0: 220, f1: 52, gain: 0.34 * s, decay: 0.28, pan });
+    this.tone({ type: 'sawtooth', f0: 440, f1: 110, gain: 0.12 * s, decay: 0.22, pan });
+    this.noise({ f0: 1100, f1: 240, q: 1.8, gain: 0.18 * s, decay: 0.2, pan });
+  },
+  // Blink arrival: dimensional phase-fold chord.
+  blink(pan, s) {
+    this.tone({ type: 'sine', f0: 320, f1: 1480, gain: 0.18 * s, decay: 0.16, pan });
+    this.tone({ type: 'triangle', f0: 960, f1: 480, gain: 0.12 * s, decay: 0.18, pan, delay: 0.02 });
+    this.noise({ f0: 2800, f1: 6200, q: 1.5, gain: 0.12 * s, decay: 0.1, pan });
+  },
+  // Vortex collapse: inward whistle slamming into a dark-matter boom.
+  vortex(pan, s) {
+    this.tone({ type: 'sine', f0: 620, f1: 34, gain: 0.65 * s, decay: 0.55, pan });
+    this.tone({ type: 'sawtooth', f0: 180, f1: 38, gain: 0.25 * s, decay: 0.45, pan });
+    this.noise({ f0: 1800, f1: 70, type: 'lowpass', q: 1.2, gain: 0.7 * s, decay: 0.65, pan });
+  },
   // F shove: a dull punch into the terrain.
   punch(pan, s) {
     this.tone({ type: 'sine', f0: 180, f1: 60, gain: 0.35 * s, decay: 0.1, pan });

@@ -4,7 +4,7 @@ import { GRENADE } from './weapons.js';
 
 // Physical projectiles, stepped by the server and extrapolated by clients with the same code.
 // Shape: { id, k, o: owner slot, x, y, vx, vy, t: age, sq: fire input seq, fx, fy: last free point }
-export const PROJ = { ROCKET: 1, GRENADE: 2, MIRV: 3, BOMBLET: 4, C4: 5, QUAKE: 6 };
+export const PROJ = { ROCKET: 1, GRENADE: 2, MIRV: 3, BOMBLET: 4, C4: 5, QUAKE: 6, BLINK: 7, VORTEX: 8 };
 
 export const ROCKET = { acc: 1500, max: 920, pad: 3 };
 export const NADE = { grav: 1500, bounce: 0.42, friction: 0.75 };
@@ -12,6 +12,8 @@ export const MIRV = { grav: 700, split: 0.5, count: 8, pad: 3 };
 export const BOMBLET = { grav: 900, chute: 0.22, fall: 110, sway: 40, pad: 4 };
 export const QUAKE = { grav: 1100, pad: 4 };
 export const STICKY = { grav: 1300, life: 90 };
+export const BLINK_P = { grav: 240, pad: 4, maxAge: 2.2 };
+export const VORTEX_P = { grav: 340, pad: 5, flight: 0.55, total: 1.8 };
 export const MAX_AGE = 8;
 
 // Result codes of stepProj.
@@ -126,6 +128,29 @@ export function stepProj(pr, t, dt) {
         pr.vx += (sway - pr.vx) * Math.min(1, 3 * dt);
       }
       return moveStraight(pr, t, dt);
+    }
+    case PROJ.BLINK:
+      if (pr.t > BLINK_P.maxAge) return GONE;
+      pr.vy += BLINK_P.grav * dt;
+      return moveStraight(pr, t, dt);
+    case PROJ.VORTEX: {
+      if (pr.st) return pr.t >= VORTEX_P.total ? TIMER : ALIVE;
+      pr.vy += VORTEX_P.grav * dt;
+      if (moveStraight(pr, t, dt) === HIT_WALL) {
+        pr.x = pr.fx;
+        pr.y = pr.fy;
+        pr.vx = 0;
+        pr.vy = 0;
+        pr.st = 1;
+        pr.t = VORTEX_P.flight;
+        return ALIVE;
+      }
+      if (pr.t >= VORTEX_P.flight) {
+        pr.vx = 0;
+        pr.vy = 0;
+        pr.st = 1;
+      }
+      return ALIVE;
     }
     default:
       return GONE;

@@ -1,5 +1,5 @@
 import { DT } from '/shared/constants.js';
-import { ALIVE, HIT_WALL, PROJ, stepProj } from '/shared/projectiles.js';
+import { ALIVE, HIT_WALL, PROJ, VORTEX_P, stepProj } from '/shared/projectiles.js';
 
 const PROJ_BLEND = 0.35; // s: remote projectiles catch up from the remote timeline to ours
 
@@ -95,12 +95,18 @@ export const interp = {
       else if (d.k === PROJ.MIRV) this.fx.trail(...back(12), 1.4);
       else if (d.k === PROJ.QUAKE && Math.random() < 0.6) this.fx.trail(...back(8), 0.8);
       else if (d.k === PROJ.BOMBLET && Math.random() < 0.3) this.fx.trail(d.x, d.y, 0.5);
+      else if (d.k === PROJ.BLINK) this.fx.add({ k: 'px', x: d.x, y: d.y, vx: 0, vy: 0, g: 0, drag: 4, life: 0.14, t: 0, c: '#3ee6ff', s: 1 });
+      else if (d.k === PROJ.VORTEX && !d.st && Math.random() < 0.7) this.fx.add({ k: 'px', x: d.x, y: d.y, vx: 0, vy: 0, g: 0, drag: 3, life: 0.18, t: 0, c: '#c77dff', s: 1 });
     }
   },
 
   simulate(pr, ahead) {
     const c = { ...pr };
     if (c.k === PROJ.C4 && c.st) return c; // stuck charges do not move
+    if (c.k === PROJ.VORTEX && c.st) {
+      c.t += Math.max(0, ahead) * DT;
+      return c.t >= VORTEX_P.total ? null : c;
+    }
     if (ahead <= 0) {
       c.x -= c.vx * -ahead * DT;
       c.y -= c.vy * -ahead * DT;
@@ -114,7 +120,7 @@ export const interp = {
       return res === HIT_WALL ? null : c;
     }
     const frac = ahead - n;
-    if (c.k !== PROJ.GRENADE && !(c.k === PROJ.C4 && c.st)) {
+    if (c.k !== PROJ.GRENADE && !(c.k === PROJ.C4 && c.st) && !(c.k === PROJ.VORTEX && c.st)) {
       c.x += c.vx * frac * DT;
       c.y += c.vy * frac * DT;
     }

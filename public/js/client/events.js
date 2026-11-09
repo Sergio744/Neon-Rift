@@ -20,7 +20,13 @@ export const events = {
         if (ev.s !== mine) this.delay(ev.k, ev);
         break;
       case 'r':
+      case 'pr':
         if (ev.s !== mine) this.delay(this.lastFireK[ev.s] || k, ev);
+        break;
+      case 'tp':
+        fx.blinkFx(ev.x1, ev.y1, ev.x2, ev.y2, this.color(ev.s));
+        sfx.play('blink', ev.x2);
+        if (ev.s === mine) fx.shake(0.14);
         break;
       case 'i':
         if (ev.sh) {
@@ -49,10 +55,19 @@ export const events = {
         break;
       }
       case 'b': {
-        fx.explosion(ev.x, ev.y, ev.r);
+        if (ev.k === 'blink') {
+          fx.ring(ev.x, ev.y, 4, ev.r * 1.4, '#3ee6ff', 0.24);
+          break;
+        }
         const d = Math.hypot(ev.x - this.me.x, ev.y - this.me.y);
         fx.shake(Math.max(0.12, 0.75 - d / 900) * (ev.r / 46));
-        sfx.play('boom', ev.x, ev.r / 46);
+        if (ev.k === 'vortex') {
+          fx.vortexBoom(ev.x, ev.y, ev.r);
+          sfx.play('vortex', ev.x, ev.r / 46);
+        } else {
+          fx.explosion(ev.x, ev.y, ev.r);
+          sfx.play('boom', ev.x, ev.r / 46);
+        }
         break;
       }
       case 'd': {
@@ -144,6 +159,8 @@ export const events = {
       this.shotFx(ev.s, ev.w, ev.a, ev.x, ev.y, ev.sq, false);
     } else if (ev.e === 'r') {
       this.fx.rail(ev.x1, ev.y1, ev.x2, ev.y2, this.color(ev.s));
+    } else if (ev.e === 'pr') {
+      this.fx.prismFx(ev.pts, this.color(ev.s));
     } else if (ev.e === 'n') {
       const r = this.remotes[ev.s];
       this.sfx.play('nade', r ? r.x : this.me.x);

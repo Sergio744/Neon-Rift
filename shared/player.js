@@ -387,6 +387,8 @@ export function stepPlayer(p, inp, t, out, opts) {
     }
     if (pressed & BTN.ALT && W.kind === 'c4') {
       if (out) out.push({ k: 'det' });
+    } else if (pressed & BTN.ALT && W.kind === 'blink') {
+      if (out) out.push({ k: 'blink_act' });
     } else if (pressed & BTN.ALT && p.gcd <= 0 && p.nades > 0) {
       p.gcd = GRENADE.cd;
       p.nades--;

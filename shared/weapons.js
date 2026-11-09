@@ -1,6 +1,7 @@
 import { shotRng } from './rng.js';
 
-// Stats follow destroy.spritefusion.com for the original seven; the rest are sandbox tools.
+// Stats follow destroy.spritefusion.com for the original seven; indices 7..13 are classic/sandbox tools,
+// and indices 14..16 are Neon Rift signature weapons.
 // Indices are part of the wire format, so new weapons are only ever appended.
 // `push` is shooter recoil (px/s), `hold` and `muzzle` are world px from the shoulder,
 // `ammo` is per life (-1 = infinite; continuous tools count ticks).
@@ -62,6 +63,22 @@ export const WEAPONS = [
     id: 'rifle', name: 'AK-47', kind: 'bullet', auto: true, cd: 0.088, speed: 2400, spread: 0.045,
     pellets: 1, dmg: 15, carve: 6, push: 12, kick: 5, shake: 0.13, ammo: 180, hold: 30, muzzle: 56, casing: true,
   },
+  // Neon Rift signature arsenal (appended at indices 14, 15, 16):
+  // 14: Blink Disc — teleports shooter on impact or mid-air via ALT (right-click) with a rift pulse.
+  {
+    id: 'blink', name: 'BLINK DISC', kind: 'blink', auto: false, cd: 0.72, speed: 960,
+    push: 0, kick: 4, shake: 0.16, ammo: 8, hold: 12, muzzle: 38,
+  },
+  // 15: Prism Rifle — neon laser beam that ricochets up to 3 times off walls (+15% dmg per bounce).
+  {
+    id: 'prism', name: 'PRISM RIFLE', kind: 'prism', auto: false, cd: 0.42, dmg: 38,
+    push: 85, kick: 6, shake: 0.24, ammo: 24, hold: 15, muzzle: 54,
+  },
+  // 16: Vortex Orb — anchors into a gravitational singularity that pulls players & terrain, then implodes.
+  {
+    id: 'vortex', name: 'VORTEX ORB', kind: 'vortex', auto: false, cd: 1.35, speed: 540,
+    push: 140, kick: 8, shake: 0.38, ammo: 4, hold: 13, muzzle: 48,
+  },
 ];
 
 export const W = Object.fromEntries(WEAPONS.map((w, i) => [w.id, i]));
@@ -76,8 +93,10 @@ export const KILL_NAMES = [...WEAPONS.map((w) => w.name), 'GRENADE', 'DEBRIS', '
 // Hotbar and unlock order of every weapon a player can get. The pistol is always owned.
 // SANDSTORM, QUAKE and CUTTER are retired: they keep their `WEAPONS` index (wire format) but are
 // never selectable, granted or shown.
-export const UNLOCKS = ['pistol', 'smg', 'shotgun', 'builder', 'rifle', 'sniper', 'rocket', 'flame', 'rail', 'c4', 'toomuch']
-  .map((id) => W[id]);
+export const UNLOCKS = [
+  'pistol', 'smg', 'shotgun', 'builder', 'rifle', 'blink', 'prism',
+  'sniper', 'rocket', 'flame', 'vortex', 'rail', 'c4', 'toomuch',
+].map((id) => W[id]);
 export const SELECTABLE = UNLOCKS;
 export const START_OWNED = 1 << W.pistol;
 export const ALL_OWNED = (1 << WEAPONS.length) - 1; // bots: every weapon, retired ones included
@@ -86,9 +105,11 @@ const maskOf = (ids) => ids.reduce((m, id) => m | (1 << W[id]), 0);
 // Weapon pools ("allowed weapons"): a bitmask of SELECTABLE weapons. 1v1 players own the whole pool
 // from the start; survival starts with the first 4 of it and unlocks the rest wave by wave.
 export const FULL_POOL = UNLOCKS.reduce((m, w) => m | (1 << w), 0);
+export const RIFT_POOL = maskOf(['pistol', 'blink', 'prism', 'vortex', 'rail', 'builder']);
 export const BASIC_POOL = maskOf(['pistol', 'smg', 'shotgun', 'rifle', 'sniper', 'rocket', 'rail', 'builder']);
 export const POOLS = {
   all: { name: 'ALL WEAPONS', mask: FULL_POOL },
+  rift: { name: 'RIFT ARSENAL', mask: RIFT_POOL },
   basic: { name: 'BASIC', mask: BASIC_POOL },
 };
 export const POOL_IDS = Object.keys(POOLS);
@@ -117,6 +138,7 @@ export const poolStart = (pool, n = 4) => poolList(pool).slice(0, n).reduce((m, 
 export const GRENADE = { cd: 0.55, fuse: 1.55, speed: 700, count: 3 };
 
 // `r` blast radius, `w` kill-feed id. Every blast crumbles the rim; `fire` also sets it alight.
+// `noSelf` spares the owner from self-damage/knockback (used by Blink Disc arrival pulse).
 export const BOOMS = {
   rocket: { r: 46, dmg: 95, power: 1, w: W.rocket },
   grenade: { r: 50, dmg: 85, power: 1, w: NADE_W },
@@ -125,21 +147,18 @@ export const BOOMS = {
   c4: { r: 60, dmg: 110, power: 1.15, w: W.c4, fire: 1 },
   quake: { r: 26, dmg: 45, power: 0.9, w: W.quake, quake: 110 },
   tnt: { r: 50, dmg: 100, power: 1.2, w: TNT_W, fire: 1 },
+  blink: { r: 24, dmg: 48, power: 0.7, w: W.blink, noSelf: true },
+  vortex: { r: 56, dmg: 92, power: 1.15, w: W.vortex },
 };
 
-// The flamer melts terrain fast, shoves what it hits and pushes its user back (`thrust`, px/s²):
-// aimed down it becomes a hover. It lights terrain rarely so maps do not turn into a fire pit.
-// Against a wall it digs a body-sized tunnel: aimed sideways the cut spans `tunnel` px (head
-// clearance above the jet, feet below) so the user can walk into the hole it melts.
 export const FLAME = {
   range: 210, carveEvery: 2, carveR: 12, tunnel: [10, 30], igniteEvery: 14, hitEvery: 6, thrust: 1500, push: 170,
 };
-// F: a shove that breaks the terrain in front of the player (never bedrock) and knocks enemies back.
 export const MELEE = { cd: 0.28, reach: 16, r: 16, dmg: 20, hitR: 30, push: 460 };
 export const RAIL = { range: 2400, maxPen: 150, carve: 4 };
+export const PRISM = { range: 1500, bounces: 3, carve: 3, boost: 0.15 };
+export const VORTEX = { pullR: 195, pullEnemy: 2600, pullAlly: 420, carveR: 16, carveEvery: 12, dps: 22 };
 export const BEAM = { range: 300, carveEvery: 2, carveR: 4, hitEvery: 6 };
-// Builder pieces (see shared/build.js): `block` brick size and `thick` piece thickness in cells,
-// `tile` grid square in blocks (walls and floors are one tile long), `cursor` reach from the shoulder in px.
 export const BUILD = { block: 6, tile: 6, thick: 4, cursor: 170 };
 export const SPRAY = { reach: 120, every: 2, size: 3 };
 export const C4 = { max: 4, stick: 1 };

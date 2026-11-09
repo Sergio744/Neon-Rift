@@ -1,14 +1,14 @@
 import { PHYS } from '/shared/constants.js';
-import { playerBox, railTrace, segAabb } from '/shared/geom.js';
+import { playerBox, prismTrace, railTrace, segAabb } from '/shared/geom.js';
 import { PROJ } from '/shared/projectiles.js';
-import { BEAM, FLAME, GRENADE, RAIL, SPRAY, W, WEAPONS, owns, pelletDirs, poolBar } from '/shared/weapons.js';
+import { BEAM, FLAME, GRENADE, PRISM, RAIL, SPRAY, W, WEAPONS, owns, pelletDirs, poolBar } from '/shared/weapons.js';
 import { jetNozzle, muzzleWorld } from '../render.js';
 
-const BIG_SHOT = [1, 1, 2, 2, 2, 1, 2, 0, 0, 0, 0, 2, 2, 1];
+const BIG_SHOT = [1, 1, 2, 2, 2, 1, 2, 0, 0, 0, 0, 2, 2, 1, 1, 2, 2];
 const LASER = 1400; // px: reach of the sniper's laser sight
 const TRACER = '#fff3a8';
 const LOOP_TOOL = { flame: 0, beam: 1, spray: 2 };
-const GHOST_KIND = { rocket: PROJ.ROCKET, mirv: PROJ.MIRV, quake: PROJ.QUAKE };
+const GHOST_KIND = { rocket: PROJ.ROCKET, mirv: PROJ.MIRV, quake: PROJ.QUAKE, blink: PROJ.BLINK, vortex: PROJ.VORTEX };
 
 // Local weapon handling and every shot / continuous-tool effect (mixin of ClientGame).
 export const shots = {
@@ -81,6 +81,25 @@ export const shots = {
       ctx.fillRect(ex - 1, ey - 1, 2, 2);
       ctx.restore();
     }
+    // Local Prism Rifle guide: shows the first wall bounce so bank shots can be lined up cleanly.
+    if (mine && this.wantW === W.prism) {
+      const mz = muzzleWorld(mine.x, mine.y, this.aim, W.prism);
+      const { pts } = prismTrace(this.terrain, mz.x, mz.y, this.aim, 520, 1);
+      if (pts.length >= 4) {
+        ctx.save();
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1;
+        for (let seg = 0; seg < (pts.length >> 1) - 1; seg++) {
+          ctx.globalAlpha = seg === 0 ? 0.45 : 0.3;
+          ctx.strokeStyle = seg === 0 ? '#3ee6ff' : '#ff4d9d';
+          ctx.beginPath();
+          ctx.moveTo(pts[seg * 2] / 2, pts[seg * 2 + 1] / 2);
+          ctx.lineTo(pts[seg * 2 + 2] / 2, pts[seg * 2 + 3] / 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
   },
 
   localAction(a, seq) {
@@ -137,11 +156,17 @@ export const shots = {
     const dx = Math.cos(a.a);
     const dy = Math.sin(a.a);
     const wall = this.terrain.raycast(a.x, a.y, dx, dy, W.muzzle);
-    if (wall >= 0 && wall < 10) return;
-    const dist = wall >= 0 ? Math.max(0, wall - 3) : W.muzzle;
     const k = GHOST_KIND[W.kind];
+    if (k === PROJ.BLINK) {
+      for (const g of this.ghosts) if (g.pr.k === PROJ.BLINK) g.done = true;
+    } else if (wall >= 0 && wall < 10) {
+      return;
+    }
+    const dist = wall >= 0 ? Math.max(0, wall - 3) : W.muzzle;
+    const carry = k === PROJ.ROCKET || k === PROJ.BLINK ? 0 : k === PROJ.VORTEX ? 0.25 : 0.3;
     this.addGhost(seq, {
-      k, x: a.x + dx * dist, y: a.y + dy * dist, vx: dx * W.speed + (k !== PROJ.ROCKET ? a.vx * 0.3 : 0), vy: dy * W.speed,
+      k, x: a.x + dx * dist, y: a.y + dy * dist, st: 0,
+      vx: dx * W.speed + a.vx * carry, vy: dy * W.speed,
     });
   },
 
@@ -174,6 +199,9 @@ export const shots = {
     } else if (W.kind === 'rail' && local) {
       const tr = railTrace(this.terrain, x, y, a, RAIL.range, RAIL.maxPen);
       fx.rail(mz.x, mz.y, tr.x2, tr.y2, this.color(slot));
+    } else if (W.kind === 'prism' && local) {
+      const tr = prismTrace(this.terrain, x, y, a, PRISM.range, PRISM.bounces);
+      fx.prismFx(tr.pts, this.color(slot), mz.x, mz.y);
     }
   },
 
@@ -239,6 +267,9 @@ export const shots = {
     }
     if (other) this.sfx.setLoops(1, other.x, other.on, other.jet, other.tool);
     else this.sfx.setLoops(1, this.sfx.earX, false, 0);
+    for (const d of this.projDisp.values()) {
+      if (d.k === PROJ.VORTEX && d.st) this.fx.vortexFx(d.x, d.y);
+    }
   },
 
   toolFx(s, p, aim, kind) {
