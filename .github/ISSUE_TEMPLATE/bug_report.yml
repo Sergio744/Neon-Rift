@@ -1,0 +1,51 @@
+name: 🐛 Bug Report / Signaler un bug
+description: Report a gameplay, network, map, UI, or audio bug (EN / FR)
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve **Neon Rift**! Feel free to write in **English** or **French**.
+        Merci d'aider à améliorer **Neon Rift** ! Vous pouvez rédiger en **français** ou en **anglais**.
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Game Mode / Mode de jeu
+      options:
+        - Quick / Private 1v1 Duel
+        - Group Room (FFA / Teams)
+        - Solo Survival
+        - Co-op Survival
+        - Main Menu / UI / Server
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened? / Que s'est-il passé ?
+      description: Clear description of the bug and what you expected instead.
+      placeholder: "When firing C4 on a moving sand pile..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce / Étapes pour reproduire
+      placeholder: |
+        1. Start a Solo Survival match
+        2. Switch to Builder (B)
+        3. ...
+    validations:
+      required: false
+
+  - type: input
+    id: env
+    attributes:
+      label: Browser & OS / Navigateur & Système
+      placeholder: "Chrome 131 / Windows 11 (AZERTY)"
+    validations:
+      required: false
