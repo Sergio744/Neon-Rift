@@ -49,6 +49,8 @@ const ui = {
   wavebar: $('#wavebar'),
   soloOver: $('#solo-over'),
   coopWait: $('#coop-wait'),
+  parkedBar: $('#parked-bar'),
+  matchAlert: $('#match-alert'),
 };
 
 let maps = [];
@@ -60,6 +62,8 @@ let coop = null; // last co-op room info
 let sv = null; // last survival state, solo or co-op
 let crewNames = [];
 let room = null;
+let parkedRoom = null; // { code, mode } while a private room waits in the background
+let alertTimer = null;
 let lastState = '';
 let countdownEnd = 0;
 let lastBeep = -1;
@@ -128,12 +132,13 @@ function copyText(text) {
 }
 
 function copyInvite(e) {
-  const code = room?.code ?? coop?.code;
+  const code = room?.code ?? coop?.code ?? parkedRoom?.code;
   if (!code) return;
   copyText(inviteLink(code));
   sfx.play('switch');
   const btn = e?.currentTarget;
   if (btn instanceof HTMLElement) {
+    const key = btn.dataset.i18n || 'copyInvite';
     clearTimeout(copyTimers.get(btn));
     btn.classList.add('copied');
     btn.textContent = `✓ ${tr('inviteCopied')}`;
@@ -141,10 +146,31 @@ function copyInvite(e) {
       btn,
       setTimeout(() => {
         btn.classList.remove('copied');
-        btn.textContent = tr('copyInvite');
+        btn.textContent = tr(key);
       }, 1500),
     );
   }
+}
+
+function renderParkedBar() {
+  const on = Boolean(parkedRoom) && mode !== 'room' && mode !== 'coop';
+  show(ui.parkedBar, on);
+  if (!on) return;
+  $('#pb-code').textContent = parkedRoom.code;
+  ui.parkedBar.classList.toggle('compact', mode === 'solo');
+}
+
+function showMatchAlert(text) {
+  ui.matchAlert.textContent = text;
+  show(ui.matchAlert, true);
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(() => show(ui.matchAlert, false), 3600);
+}
+
+function parkCurrentRoom() {
+  if (!room || room.pub || room.st !== 'waiting') return;
+  sfx.play('switch');
+  net.send({ t: 'park' });
 }
 
 // ---------- menu ----------
@@ -175,27 +201,50 @@ function join(code) {
     return;
   }
   sfx.unlock();
+  if (parkedRoom && parkedRoom.code !== code) {
+    parkedRoom = null;
+    renderParkedBar();
+  }
   net.send({ t: 'join', name: playerName(), code });
 }
 
 $('#btn-quick').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'quick', name: playerName() });
 });
 $('#btn-create').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'create', name: playerName() }); // map and weapons are picked in the waiting room
 });
 $('#btn-group').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'create', name: playerName(), mode: 'ffa' });
 });
 $('#btn-coop').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'coop', name: playerName() });
 });
 $('#btn-coop-start').addEventListener('click', () => net.send({ t: 'start' }));
 $('#btn-copy3').addEventListener('click', copyInvite);
+$('#btn-pb-copy').addEventListener('click', copyInvite);
+$('#btn-pb-return').addEventListener('click', () => {
+  sfx.unlock();
+  net.send({ t: 'unpark' });
+});
+$('#btn-pb-cancel').addEventListener('click', () => {
+  sfx.play('switch');
+  parkedRoom = null;
+  renderParkedBar();
+  net.send({ t: 'leave' });
+});
 $('#btn-join').addEventListener('click', () => join(ui.code.value));
 $('#btn-join-invite').addEventListener('click', () => join(inviteCode));
 if (inviteCode) {
@@ -263,6 +312,7 @@ function enterSurvival(m) {
 function startSolo() {
   sfx.unlock();
   enterSurvival('solo');
+  renderParkedBar();
   crewNames = [playerName()];
   game.net = solo;
   solo.start(playerName());
@@ -274,7 +324,7 @@ function exitSolo() {
   solo.stop();
   game.net = net;
   renderBest();
-  toMenu();
+  toMenu({ keepParked: true });
 }
 
 const crewName = (s) => crewNames[s] || `P${s + 1}`;
@@ -409,6 +459,13 @@ renderBest();
 
 function setPaused(on) {
   if (!game.active) return;
+  const canPark =
+    mode === 'room' &&
+    Boolean(room) &&
+    !room.pub &&
+    room.st === 'waiting' &&
+    room.names.filter(Boolean).length === 1;
+  show($('#btn-park2'), canPark);
   show(ui.pause, on);
   input.enabled = !on && ui.over.classList.contains('hidden') && ui.soloOver.classList.contains('hidden');
   if (on) input.releaseAll();
@@ -471,12 +528,15 @@ function leave() {
     exitSolo();
     return;
   }
+  parkedRoom = null;
   net.send({ t: 'leave' });
   toMenu();
 }
 
 // Back to the menu from any mode, restoring the 1v1 HUD defaults.
-function toMenu() {
+function toMenu({ keepParked = false } = {}) {
+  if (solo.active) solo.stop();
+  if (!keepParked) parkedRoom = null;
   mode = 'menu';
   room = null;
   coop = null;
@@ -496,20 +556,23 @@ function toMenu() {
   show(ui.scoreboard, true);
   show(ui.wavebar, false);
   show($('#btn-copy2'), true);
+  show($('#btn-park2'), false);
   $('#pause-note').textContent = 'THE MATCH KEEPS RUNNING';
-  $('#btn-leave').textContent = 'LEAVE MATCH';
+  $('#btn-leave').textContent = tr('leaveMatch');
   center('', '', false);
   show(ui.hud, false);
   show(ui.pause, false);
   show(ui.over, false);
   show(ui.menu, true);
   clearTimeout(overTimer);
-  history.replaceState(null, '', '/');
+  history.replaceState(null, '', parkedRoom ? `/?room=${parkedRoom.code}` : '/');
   input.enabled = false;
+  renderParkedBar();
 }
 
 $('#btn-resume').addEventListener('click', () => setPaused(false));
 $('#btn-copy2').addEventListener('click', copyInvite);
+$('#btn-park2').addEventListener('click', parkCurrentRoom);
 $('#btn-mute').addEventListener('click', () => {
   sfx.setMuted(!sfx.muted);
   updateMuteLabel();
@@ -541,7 +604,9 @@ updateMuteLabel();
 const survivalMode = () => mode === 'solo' || mode === 'coop';
 // The kill feed says YOU everywhere but in a duel, where both names are on the scoreboard.
 const hud = createHud({ game, sfx, showYou: () => survivalMode() || isGroup(room) });
-const roomUi = createRoomUi({ game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite });
+const roomUi = createRoomUi({
+  game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite, onPark: parkCurrentRoom,
+});
 const feel = createFeel({ game, sfx, survival: survivalMode });
 const SOLO_DEATH_RULE = {
   duel: 'THAT DEATH SCORES FOR YOUR OPPONENT',
@@ -684,6 +749,10 @@ net.on('open', () => {
 net.on('close', () => {
   ui.conn.textContent = tr('reconnecting');
   ui.conn.classList.add('bad');
+  if (parkedRoom) {
+    parkedRoom = null;
+    renderParkedBar();
+  }
   if (game.active && !solo.active) {
     rejoinCode = (mode === 'room' ? room?.code : coop?.code) ?? null;
     toMenu();
@@ -694,7 +763,17 @@ net.on('hello', (msg) => {
   maps = msg.maps;
   if (msg.pools?.length) poolPresets = msg.pools;
 });
+net.on('parked', (msg) => {
+  parkedRoom = { code: msg.code, mode: msg.mode };
+  toMenu({ keepParked: true });
+});
 net.on('joined', (msg) => {
+  if (solo.active) solo.stop();
+  game.net = net;
+  game.pending = [];
+  game.offset = null;
+  parkedRoom = null;
+  renderParkedBar();
   if (msg.mode === 'coop') {
     enterSurvival('coop');
     game.roomState = 'playing';
@@ -703,6 +782,7 @@ net.on('joined', (msg) => {
   } else {
     if (mode !== 'room') toMenu();
     mode = 'room';
+    renderParkedBar();
   }
   game.setSlot(msg.slot);
   history.replaceState(null, '', `/?room=${msg.code}`);
@@ -719,6 +799,11 @@ net.on('joined', (msg) => {
   feel.reset();
   helpOnStart();
   center('', '', false);
+  if (msg.opponent) {
+    sfx.play('unlock');
+    const suffix = msg.mode === 'duel' ? tr('opponentJoinedDuel') : tr('opponentJoinedRoom');
+    showMatchAlert(`⚡ ${msg.opponent} · ${tr('roomLabel')} ${msg.code} — ${suffix}`);
+  }
 });
 net.on('map', (msg) => {
   game.loadMap(msg);

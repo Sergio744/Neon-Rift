@@ -93,6 +93,13 @@ export const STRINGS = {
     ctrlBuild: 'BUILDER: SIDE = WALL, UP/DOWN = FLOOR, T STYLE',
     ctrlTab: 'SCOREBOARD (HOLD)',
     ctrlEsc: 'MENU',
+    waitInMenu: 'WAIT IN MENU / PLAY SOLO',
+    standbyRoom: 'WAITING FOR OPPONENT',
+    copyShort: 'COPY LINK',
+    returnRoom: 'RETURN',
+    closeRoom: 'CANCEL',
+    opponentJoinedDuel: 'JOINED — STARTING DUEL!',
+    opponentJoinedRoom: 'JOINED YOUR ROOM!',
   },
   fr: {
     tagline: 'SHOOTER STICKMAN COMMUNAUTAIRE SUR CARTES DESTRUCTIBLES',
@@ -184,6 +191,13 @@ export const STRINGS = {
     ctrlBuild: 'BUILDER : CÔTÉ = MUR, HAUT/BAS = SOL, T STYLE',
     ctrlTab: 'SCORES (MAINTENIR)',
     ctrlEsc: 'MENU',
+    waitInMenu: 'ATTENDRE AU MENU / JOUER SOLO',
+    standbyRoom: "EN ATTENTE D'ADVERSAIRE",
+    copyShort: 'COPIER LIEN',
+    returnRoom: 'RETOURNER',
+    closeRoom: 'ANNULER',
+    opponentJoinedDuel: 'A REJOINT — DUEL LANCÉ !',
+    opponentJoinedRoom: 'A REJOINT TON SALON !',
   },
 };
 

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import WebSocket from 'ws';
 import { BTN, MAT_BEDROCK, PHYS } from '../shared/constants.js';
 import { Game } from '../shared/game.js';
 import { prismTrace } from '../shared/geom.js';
 import { MAP_IDS, buildMap } from '../shared/maps.js';
 import { PROJ, VORTEX_P } from '../shared/projectiles.js';
 import { PRISM, RIFT_POOL, W, WEAPONS, owns, sanitizePool } from '../shared/weapons.js';
+import { startServer } from '../server/index.js';
 import { Room } from '../server/room.js';
 
 function duel(map = 'flat') {
@@ -176,4 +178,63 @@ test('Vortex Orb anchors into a singularity, pulls enemies inward, and implodes'
   assert.ok(minDist < distAtAnchor - 25, `expected enemy pulled closer to singularity (${minDist} vs ${distAtAnchor})`);
   assert.equal(g.projs.filter((q) => q.k === PROJ.VORTEX).length, 0, 'Vortex Orb imploded at end of timer');
   assert.ok(p1.hp < 100, 'Vortex singularity + implosion damaged enemy');
+});
+
+test('private duel creator can park room in background and auto-wakes when opponent joins', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const host = mkClient();
+    const rival = mkClient();
+    await Promise.all([host.open, rival.open]);
+
+    host.send({ t: 'create', name: 'sergio' });
+    const created = await host.wait((m) => m.t === 'joined');
+    assert.equal(created.slot, 0);
+
+    // Park the room so the creator can wait in the menu or play Solo Survival.
+    host.send({ t: 'park' });
+    const parked = await host.wait((m) => m.t === 'parked');
+    assert.equal(parked.code, created.code);
+
+    // Clear host message log, then have rival join via the invite code.
+    host.msgs.length = 0;
+    rival.send({ t: 'join', name: 'rival', code: created.code });
+
+    const woke = await host.wait((m) => m.t === 'joined' && m.opponent === 'RIVAL');
+    assert.equal(woke.code, created.code);
+    assert.equal(woke.slot, 0);
+
+    const countdown = await host.wait((m) => m.t === 'room' && m.st === 'countdown');
+    assert.deepEqual(countdown.names, ['SERGIO', 'RIVAL']);
+
+    host.ws.close();
+    rival.ws.close();
+  } finally {
+    await srv.close();
+  }
 });

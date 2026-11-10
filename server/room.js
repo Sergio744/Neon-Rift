@@ -25,6 +25,7 @@ export class Room {
     this.mapId = MAPS[map] ? map : this.group ? 'canyon' : 'neon';
     this.goal = MODES[this.mode].goals.includes(goal) ? goal : MODES[this.mode].goal;
     this.clients = new Array(this.max).fill(null);
+    this.parked = new Array(this.max).fill(false); // creator waiting in menu / solo while room stays reserved
     this.teams = new Array(this.max).fill(-1); // team of each slot in 'teams', -1 elsewhere
     this.host = -1;
     this.state = 'waiting';
@@ -65,7 +66,9 @@ export class Room {
 
   broadcast(msg) {
     const raw = JSON.stringify(msg);
-    for (const c of this.clients) send(c, raw);
+    for (let s = 0; s < this.max; s++) {
+      if (this.clients[s] && !this.parked[s]) send(this.clients[s], raw);
+    }
   }
 
   info() {
@@ -138,6 +141,19 @@ export class Room {
     if (this.mode === 'teams') this.teams[slot] = this.smallerTeam();
     this.applyTeams();
     send(client, { t: 'joined', code: this.code, slot, pub: this.pub, mode: this.mode });
+
+    // Wake any parked creator/host waiting in the menu or Solo Survival so they switch right in.
+    for (let s = 0; s < this.max; s++) {
+      if (s === slot || !this.parked[s] || !this.clients[s]) continue;
+      this.parked[s] = false;
+      resetInputs(this.clients[s], s, s % 2 === 0 ? 0 : Math.PI);
+      if (this.group) this.game.addPlayer(s, this.game.pickSpawn(s));
+      send(this.clients[s], {
+        t: 'joined', code: this.code, slot: s, pub: this.pub, mode: this.mode, opponent: client.name,
+      });
+      if (this.group) send(this.clients[s], this.mapMsg());
+    }
+
     if (!this.group && this.count === 2) {
       this.startMatch();
     } else {
@@ -148,10 +164,47 @@ export class Room {
     return slot;
   }
 
+  canPark(client) {
+    return (
+      !this.pub &&
+      this.state === 'waiting' &&
+      this.count === 1 &&
+      this.clients[client.slot] === client &&
+      this.isHost(client)
+    );
+  }
+
+  // Keeps the private room reserved while its creator returns to the menu or plays Solo Survival.
+  park(client) {
+    if (!this.canPark(client) || this.parked[client.slot]) return false;
+    const slot = client.slot;
+    this.parked[slot] = true;
+    client.queue = [];
+    this.game.removePlayer(slot);
+    send(client, { t: 'parked', code: this.code, mode: this.mode });
+    return true;
+  }
+
+  // Brings a parked creator back into their waiting warm-up room.
+  unpark(client) {
+    const slot = client.slot;
+    if (this.clients[slot] !== client || !this.parked[slot]) return false;
+    this.parked[slot] = false;
+    resetInputs(client, slot, slot % 2 === 0 ? 0 : Math.PI);
+    if (this.state === 'waiting') {
+      this.game.addPlayer(slot, this.group ? this.game.pickSpawn(slot) : slot);
+    }
+    send(client, { t: 'joined', code: this.code, slot, pub: this.pub, mode: this.mode });
+    send(client, this.mapMsg());
+    this.broadcast(this.info());
+    return true;
+  }
+
   leave(client) {
     const slot = client.slot;
     if (this.clients[slot] !== client) return;
     this.clients[slot] = null;
+    this.parked[slot] = false;
     client.room = null;
     this.game.removePlayer(slot);
     this.teams[slot] = -1;
@@ -361,11 +414,15 @@ export class Room {
   }
 
   queueInputs(client, list) {
+    if (this.parked[client.slot]) return;
     queueInputs(client, list);
   }
 
   tick() {
-    processInputs(this.clients, (s, inp) => this.game.applyInput(s, inp));
+    processInputs(
+      this.clients.map((c, s) => (this.parked[s] ? null : c)),
+      (s, inp) => this.game.applyInput(s, inp),
+    );
     this.game.update();
     if (this.state === 'countdown') {
       this.timer -= DT;
@@ -380,6 +437,9 @@ export class Room {
   }
 
   sendSnapshot() {
-    sendSnapshot(this.clients, this.game.snapshot());
+    sendSnapshot(
+      this.clients.map((c, s) => (this.parked[s] ? null : c)),
+      this.game.snapshot(),
+    );
   }
 }

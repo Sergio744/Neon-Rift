@@ -166,13 +166,22 @@ export class Lobby {
         const code = String(msg.code ?? '').toUpperCase().trim();
         const room = this.rooms.get(code);
         if (!room) return this.send(client, { t: 'err', m: 'ROOM NOT FOUND' });
-        if (room === client.room) return;
+        if (room === client.room) {
+          if (room instanceof Room && room.parked[client.slot]) room.unpark(client);
+          return;
+        }
         if (room.full) return this.send(client, { t: 'err', m: 'ROOM IS FULL' });
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
         room.join(client);
         break;
       }
+      case 'park':
+        if (client.room instanceof Room) client.room.park(client);
+        break;
+      case 'unpark':
+        if (client.room instanceof Room) client.room.unpark(client);
+        break;
       case 'quick': {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);

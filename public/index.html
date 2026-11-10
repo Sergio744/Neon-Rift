@@ -73,6 +73,7 @@
             <div id="w-pool"></div>
           </div>
           <button class="btn small primary hidden" id="btn-start" type="button" data-i18n="startMatch">START MATCH</button>
+          <button class="btn small park-btn hidden" id="btn-park" type="button" data-i18n="waitInMenu">WAIT IN MENU / PLAY SOLO</button>
           <div class="w-hint" id="w-hint">WARM UP WHILE YOU WAIT - PRESS B TO BUILD</div>
         </div>
 
@@ -183,6 +184,7 @@
           <div class="dim center" id="pause-note">THE MATCH KEEPS RUNNING</div>
           <button class="btn primary wide" id="btn-resume" type="button" data-i18n="resume">RESUME</button>
           <button class="btn wide" id="btn-copy2" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
+          <button class="btn wide park-btn hidden" id="btn-park2" type="button" data-i18n="waitInMenu">WAIT IN MENU / PLAY SOLO</button>
           <div class="settings">
             <button class="toggle" id="btn-mute" type="button"><span data-i18n="sound">SOUND</span><b>ON</b></button>
             <button class="toggle" id="btn-shake" type="button"><span data-i18n="screenShake">SCREEN SHAKE</span><b>ON</b></button>
@@ -219,6 +221,16 @@
           <button class="btn wide danger" id="btn-solo-menu" type="button" data-i18n="menu">MENU</button>
         </div>
       </div>
+
+      <div id="parked-bar" class="hidden">
+        <span class="pb-dot"></span>
+        <span class="pb-info"><span data-i18n="roomLabel">ROOM</span> <b id="pb-code">----</b> · <span data-i18n="standbyRoom">WAITING FOR OPPONENT</span></span>
+        <button class="btn small" id="btn-pb-copy" type="button" data-i18n="copyShort">COPY LINK</button>
+        <button class="btn small primary" id="btn-pb-return" type="button" data-i18n="returnRoom">RETURN</button>
+        <button class="btn small danger" id="btn-pb-cancel" type="button" data-i18n="closeRoom">CANCEL</button>
+      </div>
+
+      <div id="match-alert" class="hidden"></div>
 
       <div id="toast"></div>
     </div>

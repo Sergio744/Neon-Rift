@@ -56,7 +56,7 @@ function canPlay(msg) {
   return [0, 1].every((t) => msg.names.some((nm, s) => nm && msg.teams[s] === t));
 }
 
-export function createRoomUi({ game, net, maps, pools, onCopy }) {
+export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
   const name = (msg, s) => msg.names[s] || `P${s + 1}`;
   // The waiting panel can fold away to free the warm-up; a new room opens it again.
   let foldedCode = null;
@@ -137,6 +137,8 @@ export function createRoomUi({ game, net, maps, pools, onCopy }) {
     const ready = canPlay(msg);
     start.classList.toggle('hidden', !group || !host);
     start.disabled = !ready;
+    const park = $('#btn-park');
+    if (park) park.classList.toggle('hidden', msg.pub || !host || n !== 1);
     let hint = msg.pub ? 'THE NEXT PLAYER TO PICK QUICK DUEL JOINS YOU - OR SEND THE LINK' : 'SEND THE LINK TO A FRIEND - WARM UP MEANWHILE';
     if (group && !host) hint = `WAITING FOR ${name(msg, msg.host)} TO START`;
     else if (group && !ready) hint = n < 2 ? 'SHARE THE INVITE LINK - 2 PLAYERS MINIMUM' : 'EACH TEAM NEEDS AT LEAST ONE PLAYER';
@@ -281,6 +283,7 @@ export function createRoomUi({ game, net, maps, pools, onCopy }) {
 
   $('#btn-start').addEventListener('click', () => net.send({ t: 'start' }));
   $('#btn-copy').addEventListener('click', onCopy);
+  $('#btn-park')?.addEventListener('click', () => onPark?.());
 
   return { waiting, scoreboard, board, over, won, winnerText };
 }
