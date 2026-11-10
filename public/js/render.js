@@ -1,11 +1,11 @@
-import { GRID_H, GRID_W, MAT_DECOR, MAT_EMPTY, PHYS } from '/shared/constants.js';
+import { BUFF, BUFF_INFO, GRID_H, GRID_W, MAT_DECOR, MAT_EMPTY, PHYS } from '/shared/constants.js';
 import { PALETTE } from '/shared/maps.js';
 import { CHUNK } from '/shared/terrain.js';
-import { BOMBLET as BOMBLET_P, PROJ } from '/shared/projectiles.js';
+import { BOMBLET as BOMBLET_P, PROJ, VORTEX_P } from '/shared/projectiles.js';
 import { WEAPONS } from '/shared/weapons.js';
 import { drawText, hexToRgb, pxCircle, pxLine, shade } from './fx.js';
 import { BOMBLET, CHUTE, CRATE, CRATE_CHUTE, GRENADE, GUNS, JETPACK, MIRV, ROCKET } from './sprites.js';
-import { AMMO_BOX, C4_CHARGE, PACK, QUAKE_SHELL } from './sprites-tools.js';
+import { AMMO_BOX, BLINK_DISC, C4_CHARGE, PACK, QUAKE_SHELL, VORTEX_CORE } from './sprites-tools.js';
 
 // Everything draws into the 800x450 backbuffer: 1 backbuffer px = 2 world px = 1 terrain cell.
 
@@ -20,9 +20,9 @@ export function makeSky() {
   c.height = 450;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 450);
-  grad.addColorStop(0, '#120d2a');
-  grad.addColorStop(0.55, '#221a45');
-  grad.addColorStop(1, '#3a2356');
+  grad.addColorStop(0, '#070514');
+  grad.addColorStop(0.5, '#150d30');
+  grad.addColorStop(1, '#2b1348');
   g.fillStyle = grad;
   g.fillRect(0, 0, 800, 450);
   // Dither the gradient into bands so it reads as pixel art.
@@ -36,29 +36,88 @@ export function makeSky() {
     }
   }
   g.putImageData(img, 0, 0);
-  let seed = 7;
+  let seed = 19;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 105; i++) {
     const x = Math.floor(rnd() * 800);
-    const y = Math.floor(rnd() * 260);
-    g.fillStyle = rnd() < 0.2 ? '#ffffff' : rnd() < 0.5 ? '#8d86c6' : '#5d5690';
+    const y = Math.floor(rnd() * 290);
+    const pick = rnd();
+    g.fillStyle = pick < 0.18 ? '#ffffff' : pick < 0.42 ? '#3ee6ff' : pick < 0.62 ? '#ff4d9d' : '#695ea8';
     g.fillRect(x, y, 1, 1);
-    if (rnd() < 0.06) {
-      g.fillStyle = 'rgba(255,255,255,0.35)';
+    if (rnd() < 0.08) {
+      g.fillStyle = pick < 0.5 ? 'rgba(62,230,255,0.35)' : 'rgba(255,77,157,0.35)';
       g.fillRect(x - 1, y, 3, 1);
       g.fillRect(x, y - 1, 1, 3);
     }
   }
-  g.fillStyle = '#3a3370';
-  pxCircle(g, 660, 70, 22);
-  g.fillStyle = '#4d4590';
-  pxCircle(g, 656, 66, 18);
-  g.fillStyle = '#3a3370';
-  pxCircle(g, 650, 60, 4);
-  pxCircle(g, 664, 76, 3);
+
+  // Distant cyberpunk skyline silhouette along the horizon.
+  const towers = [
+    [0, 386, 46], [42, 362, 38], [78, 392, 52], [128, 348, 42], [168, 378, 56],
+    [222, 358, 36], [256, 390, 64], [318, 368, 44], [360, 382, 80], [438, 364, 48],
+    [484, 388, 58], [540, 352, 42], [580, 376, 54], [632, 344, 46], [676, 372, 62], [736, 356, 64],
+  ];
+  for (const [tx, ty, tw] of towers) {
+    g.fillStyle = '#120b28';
+    g.fillRect(tx, ty, tw, 450 - ty);
+    g.fillStyle = tx % 3 === 0 ? 'rgba(62,230,255,0.28)' : 'rgba(255,77,157,0.25)';
+    g.fillRect(tx, ty, tw, 1);
+    for (let wy = ty + 6; wy < 440; wy += 9) {
+      for (let wx = tx + 5; wx < tx + tw - 6; wx += 8) {
+        if (rnd() < 0.35) {
+          g.fillStyle = rnd() < 0.5 ? 'rgba(62,230,255,0.32)' : 'rgba(255,77,157,0.3)';
+          g.fillRect(wx, wy, 2, 2);
+        }
+      }
+    }
+  }
+
+  // Dimensional Neon Rift slashing across the upper-right sky.
+  const spine = [
+    [594, 24], [608, 36], [616, 49], [631, 61], [640, 76], [656, 89], [666, 104], [682, 118],
+  ];
+  const segs = [];
+  for (let i = 0; i < spine.length - 1; i++) {
+    const [x0, y0] = spine[i];
+    const [x1, y1] = spine[i + 1];
+    for (let k = 0; k < 8; k++) {
+      const f = k / 8;
+      const t = (i + f) / (spine.length - 1);
+      const bulge = Math.sin(t * Math.PI);
+      segs.push([Math.round(x0 + (x1 - x0) * f), Math.round(y0 + (y1 - y0) * f), bulge]);
+    }
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#3d1666';
+    pxCircle(g, rx, ry, Math.max(2, Math.round(13 * b)));
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#b5257a';
+    pxCircle(g, rx, ry, Math.max(1, Math.round(8 * b)));
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#ff4d9d';
+    pxCircle(g, rx, ry, Math.max(1, Math.round(5 * b)));
+  }
+  for (const [rx, ry, b] of segs) {
+    g.fillStyle = '#3ee6ff';
+    pxCircle(g, rx, ry, Math.max(1, Math.round(3 * b)));
+  }
+  g.fillStyle = '#ffffff';
+  for (let i = 0; i < spine.length - 1; i++) {
+    pxLine(g, spine[i][0], spine[i][1], spine[i + 1][0], spine[i + 1][1]);
+  }
+  // Floating energy shards around the rift.
+  for (const [sx, sy, col] of [
+    [580, 42, '#3ee6ff'], [648, 46, '#ff4d9d'], [602, 74, '#ff4d9d'],
+    [676, 78, '#3ee6ff'], [628, 108, '#3ee6ff'], [694, 106, '#ff4d9d'],
+  ]) {
+    g.fillStyle = col;
+    g.fillRect(sx, sy, 2, 2);
+  }
   return c;
 }
 
@@ -408,6 +467,32 @@ export function drawStick(ctx, s) {
     }
     ctx.globalAlpha = 1;
   }
+  if (s.buff > 0 && s.buffT > 0) {
+    const info = BUFF_INFO[s.buff];
+    const bcol = info ? info.color : '#ffd23f';
+    ctx.globalAlpha = s.buffT < 1.5 ? 0.35 + 0.55 * Math.abs(Math.sin(s.time * 18)) : 0.85;
+    if (s.buff === BUFF.SHIELD && s.eshield > 0) {
+      const r = 20;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 - s.time * 2.6;
+        ctx.fillStyle = i % 3 === 0 ? '#ffd23f' : '#45d483';
+        ctx.fillRect(Math.round(X + Math.cos(a) * r * 0.65), Math.round(Y - 14 + Math.sin(a) * r), 1, 1);
+      }
+    } else if (s.buff === BUFF.TURBO) {
+      ctx.fillStyle = bcol;
+      for (let i = 0; i < 4; i++) {
+        const ox = -face * (3 + ((Math.floor(s.time * 24) + i * 2) % 7));
+        ctx.fillRect(Math.round(X + ox), Math.round(Y - 2 - (i % 2) * 3), 2, 1);
+      }
+    } else {
+      ctx.fillStyle = bcol;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + s.time * 4.5;
+        ctx.fillRect(Math.round(X + Math.cos(a) * 10), Math.round(Y - 15 + Math.sin(a) * 14), 1, 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
   return { head, neck, hip, feet, knees };
 }
 
@@ -551,17 +636,54 @@ export function drawProjectile(ctx, pr) {
       }
       ctx.drawImage(BOMBLET, Math.round(x - 2), Math.round(y - 2));
       break;
+    case PROJ.BLINK: {
+      drawRotated(ctx, BLINK_DISC, x, y, pr.t * 18);
+      ctx.fillStyle = Math.floor(pr.t * 20) % 2 === 0 ? '#3ee6ff' : '#ff4d9d';
+      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
+      break;
+    }
+    case PROJ.VORTEX: {
+      if (!pr.st) {
+        drawRotated(ctx, VORTEX_CORE, x, y, -pr.t * 12);
+        break;
+      }
+      const X = Math.round(x);
+      const Y = Math.round(y);
+      const rem = Math.max(0, (VORTEX_P.total - pr.t) / (VORTEX_P.total - VORTEX_P.flight));
+      const outerR = Math.max(5, Math.round(7 + rem * 7 + Math.sin(pr.t * 22) * 1.5));
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = '#c77dff';
+      pxCircle(ctx, X, Y, outerR);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = Math.floor(pr.t * 16) % 2 === 0 ? '#3ee6ff' : '#ff4d9d';
+      pxCircle(ctx, X, Y, Math.max(4, outerR - 3));
+      ctx.restore();
+      ctx.fillStyle = '#090614';
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          if (dx * dx + dy * dy <= 10) ctx.fillRect(X + dx, Y + dy, 1, 1);
+        }
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(X, Y, 1, 1);
+      break;
+    }
     default:
       break;
   }
 }
 
 const ITEM_SPRITES = [null, AMMO_BOX, PACK];
+const ORB_COLORS = ['#3ee6ff', '#ff4d9d', '#45d483', '#ffd23f'];
 
-// Pickup of `kind` (0 crate, 1 ammo box, 2 pack) whose bottom-centre is (x, y) in world px.
+// Pickup of `kind` (0 crate, 1 ammo box, 2 pack, 3 mystery crate, 4 Rift orb) at bottom-centre (x, y) world px.
 export function drawItem(ctx, kind, x, y, falling, t) {
   if (!kind) return drawCrate(ctx, x, y, falling, t);
+  if (kind === 3) return drawMysteryCrate(ctx, x, y, falling, t);
+  if (kind === 4) return drawRiftOrb(ctx, x, y, falling, t);
   const img = ITEM_SPRITES[kind];
+  if (!img) return;
   const X = Math.round(x / 2);
   const Y = Math.round(y / 2) - (falling ? 0 : Math.round(Math.max(0, Math.sin(t * 4)) * 1.5));
   if (falling && kind === 1) ctx.drawImage(CHUTE, X - 5, Y - img.height - 9);
@@ -570,6 +692,45 @@ export function drawItem(ctx, kind, x, y, falling, t) {
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillRect(X + (img.width >> 1), Y - img.height - 1, 1, 1);
   }
+}
+
+function drawMysteryCrate(ctx, x, y, falling, t) {
+  const X = Math.round(x / 2);
+  const Y = Math.round(y / 2);
+  if (falling) ctx.drawImage(CRATE_CHUTE, X - 8, Y - 12 - 8);
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(X - 7, Y - 13, 14, 13);
+  ctx.fillStyle = '#22133d';
+  ctx.fillRect(X - 6, Y - 12, 12, 11);
+  const pulse = Math.floor(t * 5) % 2 === 0;
+  ctx.fillStyle = pulse ? '#ff4d9d' : '#3ee6ff';
+  ctx.fillRect(X - 6, Y - 12, 3, 2);
+  ctx.fillRect(X + 3, Y - 12, 3, 2);
+  ctx.fillRect(X - 6, Y - 3, 3, 2);
+  ctx.fillRect(X + 3, Y - 3, 3, 2);
+  drawText(ctx, '?', X, Y - 9, pulse ? '#ffd23f' : '#ffffff', 1);
+  if (!falling) {
+    ctx.fillStyle = pulse ? '#3ee6ff' : '#ff4d9d';
+    ctx.fillRect(X - 7, Y - 14, 1, 1);
+    ctx.fillRect(X + 6, Y - 14, 1, 1);
+  }
+}
+
+function drawRiftOrb(ctx, x, y, falling, t) {
+  const X = Math.round(x / 2);
+  const bob = falling ? 0 : Math.round(Math.sin(t * 5.5) * 2);
+  const Y = Math.round(y / 2) - 5 + bob;
+  const col = ORB_COLORS[Math.floor(t * 3.2) % ORB_COLORS.length];
+  ctx.fillStyle = OUTLINE;
+  pxCircle(ctx, X, Y, 5);
+  ctx.fillStyle = col;
+  pxCircle(ctx, X, Y, 3.6);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(X - 1, Y - 1, 2, 2);
+  const a = t * 5;
+  ctx.fillStyle = col;
+  ctx.fillRect(Math.round(X + Math.cos(a) * 6), Math.round(Y + Math.sin(a) * 4), 1, 1);
+  ctx.fillRect(Math.round(X - Math.cos(a) * 6), Math.round(Y - Math.sin(a) * 4), 1, 1);
 }
 
 // Crate position is the bottom-centre in world px.

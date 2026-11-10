@@ -1,4 +1,6 @@
+import { BUFF, BUFF_INFO } from '/shared/constants.js';
 import { CONTINUOUS, FULL_POOL, KILL_NAMES, W, WEAPONS, owns, poolBar } from '/shared/weapons.js';
+import { tr } from '../i18n.js';
 import { GUNS, NADE_ICON } from '../sprites.js';
 import { LOCK } from '../sprites-tools.js';
 
@@ -7,7 +9,7 @@ import { LOCK } from '../sprites-tools.js';
 // armory countdown and kill feed.
 
 const $ = (sel) => document.querySelector(sel);
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '[', ']'];
 const keyOf = (bar, w) => (w === W.builder ? 'B' : KEYS[bar.nums.indexOf(w)] ?? '');
 
 function setText(el, v) {
@@ -78,20 +80,24 @@ export function createHud({ game, sfx, showYou }) {
 
   function updateHotbar(h) {
     if (h.pool !== pool) buildBar(h.pool);
+    const frenzy = h.buff === BUFF.FRENZY && h.buffT > 0;
     // Locked weapons stay out of the way: only the next reward shows, as a teaser.
     const next = slots.find((q) => q.w !== W.builder && !owns(h.owned, q.w));
     for (const s of slots) {
       const ammo = h.ammo[s.w];
       const locked = !owns(h.owned, s.w);
+      const empty = !locked && ammo === 0 && !frenzy;
       s.el.classList.toggle('on', s.w === h.w);
       s.el.classList.toggle('locked', locked);
       s.el.classList.toggle('gone', locked && s !== next);
-      s.el.classList.toggle('empty', !locked && ammo === 0);
+      s.el.classList.toggle('empty', empty);
       const W = WEAPONS[s.w];
       let txt = locked || ammo < 0 ? '' : String(ammo);
-      if (!locked && CONTINUOUS.has(W.kind) && ammo > 0) txt = `${Math.ceil((ammo / W.ammo) * 100)}%`;
+      if (!locked && frenzy && ammo >= 0) txt = 'INF';
+      else if (!locked && CONTINUOUS.has(W.kind) && ammo > 0) txt = `${Math.ceil((ammo / W.ammo) * 100)}%`;
       setText(s.a, txt);
-      s.a.classList.toggle('zero', !locked && ammo === 0);
+      s.a.classList.toggle('zero', empty);
+      s.a.classList.toggle('frenzy', !locked && frenzy && ammo >= 0);
     }
     setText(nade.a, h.nades);
     nade.a.classList.toggle('zero', h.nades === 0);
@@ -110,7 +116,7 @@ export function createHud({ game, sfx, showYou }) {
   const bannerIcon = $('#unlock-icon');
   let bannerTimer = null;
 
-  function unlocked(w, everyone) {
+  function unlocked(w, everyone, mystery = false) {
     const img = GUNS[w].img;
     bannerIcon.width = img.width;
     bannerIcon.height = img.height;
@@ -120,7 +126,12 @@ export function createHud({ game, sfx, showYou }) {
     c.clearRect(0, 0, img.width, img.height);
     c.drawImage(img, 0, 0);
     setText($('#unlock-name'), WEAPONS[w].name);
-    setText($('#unlock-sub'), everyone ? 'ARMORY DROP - EVERYONE GOT IT' : `NEW WEAPON - PRESS ${keyOf(bar, w)}`);
+    const sub = mystery
+      ? `${tr('mysteryDrop')} - KEY ${keyOf(bar, w)}`
+      : everyone
+        ? 'ARMORY DROP - EVERYONE GOT IT'
+        : `NEW WEAPON - PRESS ${keyOf(bar, w)}`;
+    setText($('#unlock-sub'), sub);
     banner.classList.remove('hidden', 'pop');
     void banner.offsetWidth;
     banner.classList.add('pop');
@@ -178,11 +189,31 @@ export function createHud({ game, sfx, showYou }) {
   const stam = $('.bar.stam');
   const stamFill = $('.bar.stam i');
   const armory = $('#armory');
+  const buffPill = $('#buff-pill');
+  const buffName = $('#buff-name');
+  const buffTime = $('#buff-time');
+  const BUFF_KEYS = {
+    [BUFF.TURBO]: 'buffTurbo',
+    [BUFF.OVERDRIVE]: 'buffOverdrive',
+    [BUFF.SHIELD]: 'buffShield',
+    [BUFF.FRENZY]: 'buffFrenzy',
+  };
   let lastArmory = -2;
 
   function update(h, dt) {
     updateHotbar(h);
     updateBuild(h.build);
+    if (buffPill) {
+      const on = !h.dead && h.buff > 0 && h.buffT > 0;
+      buffPill.classList.toggle('hidden', !on);
+      if (on) {
+        const info = BUFF_INFO[h.buff];
+        buffPill.style.setProperty('--buff', info ? info.color : '#ffd23f');
+        const extra = h.buff === BUFF.SHIELD && h.eshield > 0 ? ` +${Math.ceil(h.eshield)}` : '';
+        setText(buffName, `${tr(BUFF_KEYS[h.buff] || 'buffTurbo')}${extra}`);
+        setText(buffTime, `${h.buffT.toFixed(1)}S`);
+      }
+    }
     if (tipTimer > 0) {
       tipTimer -= dt;
       if (tipTimer <= 0) tip.classList.add('hidden');
@@ -204,6 +235,7 @@ export function createHud({ game, sfx, showYou }) {
     lastArmory = -2;
     feed.textContent = '';
     banner.classList.add('hidden');
+    buffPill?.classList.add('hidden');
   }
 
   return { update, reset, unlocked, onFeed };

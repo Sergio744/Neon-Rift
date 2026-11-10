@@ -108,6 +108,15 @@ export const RULES = {
   ARMORY_CHOICES: [10, 20, 40, 0], // 0 = no armory drops
 };
 
-// The first two are the duel colours; group rooms use all eight.
-export const PLAYER_COLORS = ['#ff7b22', '#ff4d9d', '#3ee6ff', '#b4ff5a', '#ffd23f', '#b98bff', '#f4f1ff', '#ff5a5a'];
-export const CREW_COLORS = ['#ff7b22', '#ff4d9d', '#f4f1ff', '#4d8bff']; // co-op survival humans
+// Temporary Rift Orb boosts (`p.buff` wire ids).
+export const BUFF = { NONE: 0, TURBO: 1, OVERDRIVE: 2, SHIELD: 3, FRENZY: 4 };
+export const BUFF_INFO = {
+  [BUFF.TURBO]: { id: 'turbo', dur: 7.5, color: '#3ee6ff', speed: 1.38, jump: 1.12 },
+  [BUFF.OVERDRIVE]: { id: 'overdrive', dur: 7.0, color: '#ff4d9d', dmg: 1.35, cd: 0.68 },
+  [BUFF.SHIELD]: { id: 'shield', dur: 8.5, color: '#45d483', heal: 35, hp: 55 },
+  [BUFF.FRENZY]: { id: 'frenzy', dur: 6.5, color: '#ffd23f', cd: 0.82 },
+};
+
+// The first two are the duel colours (Neon Cyan vs Rift Magenta); group rooms use all eight.
+export const PLAYER_COLORS = ['#3ee6ff', '#ff4d9d', '#ff8a2b', '#b4ff5a', '#ffd23f', '#b98bff', '#f4f1ff', '#ff5a5a'];
+export const CREW_COLORS = ['#3ee6ff', '#ff4d9d', '#b4ff5a', '#ffd23f']; // co-op survival humans

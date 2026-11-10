@@ -18,8 +18,8 @@ const MAP = {
   KeyF: BTN.MELEE,
 };
 
-// Hotbar keys in unlock order: 1-9, 0, -, = (physical positions, so AZERTY works too).
-const BAR = { Minus: 10, Equal: 11, Digit0: 9, Numpad0: 9 };
+// Hotbar keys in unlock order: 1-9, 0, -, =, [, ] (physical positions, so AZERTY works too).
+const BAR = { Minus: 10, Equal: 11, Digit0: 9, Numpad0: 9, BracketLeft: 12, BracketRight: 13 };
 
 export class Input {
   constructor(canvas) {

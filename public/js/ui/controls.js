@@ -1,4 +1,5 @@
 import { sanitizePool } from '/shared/weapons.js';
+import { tr } from '../i18n.js';
 
 // Small DOM controls shared by the menus and the room panels.
 
@@ -39,5 +40,5 @@ export function settingRow(el, label, items, selected, onPick, locked = false) {
 // Weapons setting: the pool presets (ALL WEAPONS, BASIC...). `onChange(mask)` gets a sanitized pool.
 export function poolPicker(el, presets, mask, onChange, locked = false) {
   const items = presets.map((p) => ({ id: p.mask, name: p.name }));
-  settingRow(el, 'WEAPONS', items, mask, (m) => onChange(sanitizePool(m)), locked);
+  settingRow(el, tr('weaponsLabel'), items, mask, (m) => onChange(sanitizePool(m)), locked);
 }

@@ -1,6 +1,7 @@
 import { DT } from './constants.js';
 import { Game } from './game.js';
-import { mulberry32 } from './rng.js';
+import { MAPS } from './maps.js';
+import { mulberry32, randomSeed } from './rng.js';
 import { brain } from './survival-bots.js';
 import { ALL_OWNED, FULL_POOL, GRENADE, fullAmmo, poolStart, sanitizePool } from './weapons.js';
 
@@ -38,6 +39,7 @@ export const ENEMIES = {
   brute: { name: 'BRUTE', w: 2, color: '#ffd23f', take: 0.85, deal: 0.3, range: [30, 150], gap: [1.0, 1.5], acc: 1.2, pts: 150, hop: 0.5, reach: 260 },
   rocketeer: { name: 'ROCKETEER', w: 3, color: '#b4ff5a', take: 1.4, deal: 0.3, range: [320, 620], gap: [2.0, 2.8], acc: 0.8, pts: 200, hop: 0.15 },
   flamer: { name: 'FLAMER', w: 5, color: '#3ee6c4', take: 1.1, deal: 0.3, range: [20, 120], gap: [0, 0], acc: 1.4, pts: 200, hop: 0.6, reach: 200 },
+  prism: { name: 'PRISM', w: 15, color: '#ff4d9d', take: 1.5, deal: 0.28, range: [300, 680], gap: [1.6, 2.4], acc: 0.7, pts: 220, hop: 0.3, reach: 1000 },
   sniper: { name: 'SNIPER', w: 12, color: '#c77dff', take: 1.9, deal: 0.28, range: [520, 950], gap: [3.0, 4.0], acc: 0.5, pts: 250, hop: 0, steady: 0.8, reach: 1400 },
   boss: { name: 'WARLORD', w: 6, alt: 1, color: '#ff3b5c', take: 0.25, deal: 0.32, range: [220, 480], gap: [2.2, 3.0], acc: 0.9, pts: 1500, hop: 0.2 },
 };
@@ -50,6 +52,7 @@ function roster(n, crew, rng) {
   if (n >= 2) pool.push(['brute', 3]);
   if (n >= 3) pool.push(['rocketeer', 2]);
   if (n >= 4) pool.push(['flamer', 2]);
+  if (n >= 5) pool.push(['prism', 2]);
   if (n >= 6) pool.push(['sniper', 2]);
   const sum = pool.reduce((s, [, w]) => s + w, 0);
   const boss = n % 5 === 0;
@@ -72,22 +75,31 @@ function roster(n, crew, rng) {
 }
 
 export class Survival {
-  // `lobby`: players warm up (auto respawn, no waves) until `begin()`.
-  // `pool`: allowed weapons; humans start with its first 4 and each cleared wave unlocks the next.
-  constructor(seed, { lobby = false, pool = FULL_POOL } = {}) {
+  // `lobby`: players warm up (auto respawn, infinite warm-up ammo, no waves) until `begin()`.
+  // `map`: any playable map in MAPS.
+  // `riftDrops`: contextual mystery weapon crates + temporary Rift boost orbs + finite ammo.
+  // `unlockAll`: full arsenal + infinite ammo from second 1.
+  constructor(seed, { lobby = false, pool = FULL_POOL, map = SURVIVAL_MAP, unlockAll = false, riftDrops = false } = {}) {
+    this.mapId = MAPS[map] && !MAPS[map].hidden ? map : SURVIVAL_MAP;
+    this.unlockAll = Boolean(unlockAll);
+    this.riftDrops = Boolean(riftDrops) && !this.unlockAll;
     this.pool = sanitizePool(pool);
     this.reset(seed, lobby);
   }
 
   reset(seed, lobby = false) {
-    const g = new Game(SURVIVAL_MAP, seed, SURVIVAL_SLOTS);
+    const g = new Game(this.mapId, seed, SURVIVAL_SLOTS);
     g.team = g.team.map((_, s) => (isHuman(s) ? 0 : 1));
     g.autoRespawn = lobby;
+    g.infiniteAmmo = lobby || this.unlockAll;
     g.cratesOn = !lobby;
+    g.riftDrops = this.riftDrops;
     g.canLoot = g.canLoot.map((_, s) => isHuman(s));
     g.pool = this.pool;
-    g.startOwned = poolStart(this.pool);
+    g.startOwned = this.unlockAll ? this.pool : poolStart(this.pool);
     g.baseOwned = g.startOwned;
+    g.crateT = this.riftDrops ? 4.5 : g.crateT;
+    g.orbT = 7.5;
     g.onKill = (v, by) => this.onKill(v, by);
     this.game = g;
     this.seed = seed;
@@ -136,18 +148,40 @@ export class Survival {
     return Math.max(1, this.humans().length);
   }
 
-  // New weapon pool (lobby warm-up): everyone restarts from the pool's starting arsenal.
+  // New weapon pool (lobby warm-up): everyone gets the updated starting arsenal.
   setPool(pool) {
     const g = this.game;
     this.pool = sanitizePool(pool, this.pool);
     g.pool = this.pool;
-    g.startOwned = poolStart(this.pool);
+    g.startOwned = this.unlockAll ? this.pool : poolStart(this.pool);
     g.baseOwned = g.startOwned;
     for (const s of this.humans()) {
       const p = g.players[s];
       p.owned = g.baseOwned;
+      if (this.lobby || this.unlockAll) p.ammo.fill(-1);
+      else p.ammo = fullAmmo();
       if (!(p.owned & (1 << p.w))) p.w = 0;
     }
+  }
+
+  setLoadout(loadout) {
+    this.unlockAll = loadout === 'full';
+    this.riftDrops = loadout === 'drops';
+    const g = this.game;
+    g.riftDrops = this.riftDrops;
+    g.infiniteAmmo = this.lobby || this.unlockAll;
+    this.setPool(this.pool);
+  }
+
+  // Switches the warm-up map while keeping all connected humans in place.
+  setMap(map) {
+    if (!MAPS[map] || MAPS[map].hidden) return false;
+    this.mapId = map;
+    const hs = this.humans();
+    this.reset(randomSeed(), this.lobby);
+    for (const s of hs) this.addHuman(s);
+    this.game.takeEvents();
+    return true;
   }
 
   // A newcomer gets the crew's arsenal; mid-run it also brings one life.
@@ -243,12 +277,16 @@ export class Survival {
     h.lastHp = p.hp;
   }
 
-  // Each human gets its own spot on the fort roof so the crew never spawns stacked.
+  // Each human gets its own spot on the central platform/roof so the crew never spawns stacked.
   place(s) {
     const g = this.game;
-    const [sx, sy] = g.spawns[HUMAN_SPAWN];
-    const x = sx + (s - (MAX_HUMANS - 1) / 2) * 26;
-    g.spawnAt(s, x, g.terrain.findStand(x, sy));
+    const idx = Math.min(HUMAN_SPAWN, g.spawns.length - 1);
+    const [sx, sy] = g.spawns[idx];
+    const baseY = g.terrain.findStand(sx, sy);
+    const candX = Math.max(40, Math.min(g.worldW - 40, sx + (s - (MAX_HUMANS - 1) / 2) * 24));
+    const candY = g.terrain.findStand(candX, sy);
+    const useCand = Math.abs(candY - baseY) <= 36;
+    g.spawnAt(s, useCand ? candX : sx, useCand ? candY : baseY);
   }
 
   revive(s) {
@@ -331,10 +369,26 @@ export class Survival {
       if (h.out) this.revive(s);
       else if (!p.dead) {
         p.hp = Math.min(100, p.hp + WAVE_HEAL);
-        p.ammo = fullAmmo();
-        p.nades = GRENADE.count;
+        if (this.riftDrops) {
+          for (let w = 0; w < p.ammo.length; w++) {
+            const full = fullAmmo()[w];
+            if (full > 0 && (p.owned & (1 << w)) && p.ammo[w] >= 0) {
+              p.ammo[w] = Math.min(full, p.ammo[w] + Math.ceil(full * 0.4));
+            }
+          }
+          p.nades = Math.min(GRENADE.count, p.nades + 1);
+        } else if (!this.unlockAll) {
+          p.ammo = fullAmmo();
+          p.nades = GRENADE.count;
+        } else {
+          p.nades = GRENADE.count;
+        }
       }
-      g.grant(s, g.nextLocked(s));
+      if (!this.riftDrops && !this.unlockAll) g.grant(s, g.nextLocked(s));
+    }
+    if (this.riftDrops) {
+      g.dropMystery();
+      if (this.wave % 2 === 0) g.dropOrb();
     }
     if (this.wave % 5 === 0 && this.lives < maxLives(this.crewSize())) {
       this.lives++;
@@ -356,8 +410,11 @@ export class Survival {
     const pts = g.spawns.map(([x, y], i) => ({ i, x, y: g.terrain.findStand(x, y) }));
     const fresh = (q) => this.time - (this.spawnUse[q.i] ?? -99) > 2;
     const away = (q, d) => hs.every((p) => Math.hypot(q.x - p.x, q.y - p.y) > d);
-    let pick = pts.filter((q) => fresh(q) && away(q, 700));
-    if (!pick.length) pick = pts.filter((q) => away(q, 450));
+    const farD = Math.min(700, g.worldW * 0.36);
+    const midD = Math.min(450, g.worldW * 0.22);
+    let pick = pts.filter((q) => fresh(q) && away(q, farD));
+    if (!pick.length) pick = pts.filter((q) => fresh(q) && away(q, midD));
+    if (!pick.length) pick = pts.filter((q) => away(q, midD));
     if (!pick.length) pick = pts;
     const sp = pick[Math.floor(this.rng() * pick.length)];
     this.spawnUse[sp.i] = this.time;

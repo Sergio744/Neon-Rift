@@ -1,0 +1,272 @@
+// Lightweight EN / FR localization for menus, room lobbies, controls and HUD messages.
+
+const STORAGE_KEY = 'nr-lang';
+
+export const STRINGS = {
+  en: {
+    tagline: 'COMMUNITY STICKMAN SHOOTER ON DESTRUCTIBLE MAPS',
+    yourName: 'YOUR NAME',
+    playerPlaceholder: 'PLAYER',
+    joinInvite: 'JOIN ROOM',
+    playOnline: 'PLAY ONLINE',
+    quickTitle: 'QUICK DUEL',
+    quickDesc: '1V1 AGAINST THE NEXT PLAYER ONLINE',
+    privateTitle: 'PRIVATE DUEL',
+    privateDesc: '1V1 WITH A FRIEND - SEND THEM THE LINK',
+    groupTitle: 'GROUP ROOM',
+    groupDesc: '2 TO 8 PLAYERS - FREE FOR ALL OR TEAMS',
+    survivalTitle: 'SURVIVAL VS WAVES',
+    soloBtn: 'SOLO',
+    coopBtn: 'CO-OP (2-4)',
+    joinCodeLabel: 'JOIN A ROOM WITH ITS CODE',
+    joinBtn: 'JOIN',
+    connecting: 'CONNECTING...',
+    connected: 'CONNECTED',
+    reconnecting: 'RECONNECTING...',
+    creditsTop: 'FREE OPEN-SOURCE COMMUNITY',
+    creditsSub: 'INSPIRED BY',
+    creditsUnofficial: '(UNOFFICIAL)',
+    controlsHint: 'CONTROLS',
+    settingsHint: 'SETTINGS',
+    scoresHint: 'SCORES',
+    armoryDrop: 'ARMORY DROP IN',
+    unlocked: 'UNLOCKED',
+    hide: 'HIDE',
+    show: 'SHOW',
+    roomLabel: 'ROOM',
+    copyInvite: 'COPY INVITE LINK',
+    startMatch: 'START MATCH',
+    coopTitle: 'CO-OP SURVIVAL',
+    soloTitle: 'SOLO SURVIVAL',
+    startWaves: 'START THE WAVES',
+    shareCoop: 'SHARE THE LINK WITH UP TO 3 FRIENDS',
+    soloHint: 'PICK YOUR MAP & WEAPONS - WARM UP UNTIL YOU START',
+    paused: 'PAUSED',
+    resume: 'RESUME',
+    sound: 'SOUND',
+    screenShake: 'SCREEN SHAKE',
+    controlsPanel: 'CONTROLS PANEL',
+    leaveMatch: 'LEAVE MATCH',
+    quitMenu: 'QUIT TO MENU',
+    nextMap: 'NEXT MAP',
+    rematch: 'REMATCH',
+    leave: 'LEAVE',
+    gameOver: 'GAME OVER',
+    wave: 'WAVE',
+    enemies: 'ENEMIES',
+    kills: 'KILLS',
+    score: 'SCORE',
+    lives: 'LIVES',
+    best: 'BEST',
+    newBest: 'NEW BEST!',
+    tryAgain: 'TRY AGAIN',
+    playAgain: 'PLAY AGAIN',
+    menu: 'MENU',
+    bestScore: 'BEST SCORE',
+    inviteCopied: 'INVITE LINK COPIED',
+    enterCode: 'ENTER A 4-LETTER CODE',
+    findingOpponent: 'FINDING AN OPPONENT',
+    waitingOpponent: 'WAITING FOR OPPONENT',
+    players: 'PLAYERS',
+    modeLabel: 'MODE',
+    mapLabel: 'MAP',
+    weaponsLabel: 'WEAPONS',
+    pointsToWin: 'POINTS TO WIN',
+    killsToWin: 'KILLS TO WIN',
+    teamKills: 'TEAM KILLS',
+    firstTo: 'FIRST TO',
+    warmup: 'WARM-UP - NOTHING COUNTS',
+    victory: 'VICTORY',
+    defeat: 'DEFEAT',
+    youWin: 'YOU WIN',
+    youLose: 'YOU LOSE',
+    yourTeamWins: 'YOUR TEAM WINS',
+    fight: 'FIGHT!',
+    getReady: 'GET READY',
+    ctrlRun: 'RUN',
+    ctrlSprint: 'SPRINT',
+    ctrlJump: 'JUMP, AGAIN TO FLIP',
+    ctrlJet: 'JETPACK',
+    ctrlDrop: 'DROP DOWN',
+    ctrlShoot: 'SHOOT',
+    ctrlAlt: 'GRENADE / BLINK / C4',
+    ctrlWeap: 'WEAPONS, Q LAST, WHEEL CYCLES',
+    ctrlMelee: 'SHOVE - BREAKS WHAT BLOCKS YOU',
+    ctrlBuild: 'BUILDER: SIDE = WALL, UP/DOWN = FLOOR, T STYLE',
+    ctrlTab: 'SCOREBOARD (HOLD)',
+    ctrlEsc: 'MENU',
+    waitInMenu: 'WAIT IN MENU / PLAY SOLO',
+    standbyRoom: 'WAITING FOR OPPONENT',
+    copyShort: 'COPY LINK',
+    returnRoom: 'RETURN',
+    closeRoom: 'CANCEL',
+    opponentJoinedDuel: 'JOINED — STARTING DUEL!',
+    opponentJoinedRoom: 'JOINED YOUR ROOM!',
+    loadoutLabel: 'LOADOUT',
+    riftDrops: 'RIFT DROPS',
+    fullArsenal: 'FULL ARSENAL',
+    mysteryDrop: 'MYSTERY CRATE',
+    buffTurbo: 'TURBO BOOTS',
+    buffOverdrive: 'OVERDRIVE',
+    buffShield: 'ENERGY SHIELD',
+    buffFrenzy: 'AMMO FRENZY',
+  },
+  fr: {
+    tagline: 'SHOOTER STICKMAN COMMUNAUTAIRE SUR CARTES DESTRUCTIBLES',
+    yourName: 'TON PSEUDO',
+    playerPlaceholder: 'JOUEUR',
+    joinInvite: 'REJOINDRE LE SALON',
+    playOnline: 'JOUER EN LIGNE',
+    quickTitle: 'DUEL RAPIDE',
+    quickDesc: '1V1 CONTRE LE PROCHAIN JOUEUR EN LIGNE',
+    privateTitle: 'DUEL PRIVÉ',
+    privateDesc: '1V1 AVEC UN AMI - ENVOIE-LUI LE LIEN',
+    groupTitle: 'SALON DE GROUPE',
+    groupDesc: '2 À 8 JOUEURS - CHACUN POUR SOI OU ÉQUIPES',
+    survivalTitle: 'SURVIE CONTRE LES VAGUES',
+    soloBtn: 'SOLO',
+    coopBtn: 'CO-OP (2-4)',
+    joinCodeLabel: 'REJOINDRE UN SALON AVEC SON CODE',
+    joinBtn: 'REJOINDRE',
+    connecting: 'CONNEXION...',
+    connected: 'CONNECTÉ',
+    reconnecting: 'RECONNEXION...',
+    creditsTop: 'COMMUNAUTÉ OPEN-SOURCE GRATUITE',
+    creditsSub: 'INSPIRÉ DE',
+    creditsUnofficial: '(NON OFFICIEL)',
+    controlsHint: 'TOUCHES',
+    settingsHint: 'OPTIONS',
+    scoresHint: 'SCORES',
+    armoryDrop: 'LARGAGE DANS',
+    unlocked: 'DÉBLOQUÉ',
+    hide: 'MASQUER',
+    show: 'AFFICHER',
+    roomLabel: 'SALON',
+    copyInvite: "COPIER LE LIEN D'INVITATION",
+    startMatch: 'LANCER LA PARTIE',
+    coopTitle: 'SURVIE CO-OP',
+    soloTitle: 'SURVIE SOLO',
+    startWaves: 'LANCER LES VAGUES',
+    shareCoop: "PARTAGE LE LIEN AVEC JUSQU'À 3 AMIS",
+    soloHint: 'CHOISIS TA CARTE ET TES ARMES - ÉCHAUFFE-TOI AVANT DE LANCER',
+    paused: 'PAUSE',
+    resume: 'REPRENDRE',
+    sound: 'SON',
+    screenShake: 'TREMBLEMENT ÉCRAN',
+    controlsPanel: 'AIDE DES TOUCHES',
+    leaveMatch: 'QUITTER LA PARTIE',
+    quitMenu: 'RETOUR AU MENU',
+    nextMap: 'PROCHAINE CARTE',
+    rematch: 'REVANCHE',
+    leave: 'QUITTER',
+    gameOver: 'PARTIE TERMINÉE',
+    wave: 'VAGUE',
+    enemies: 'ENNEMIS',
+    kills: 'ÉLIMINATIONS',
+    score: 'SCORE',
+    lives: 'VIES',
+    best: 'RECORD',
+    newBest: 'NOUVEAU RECORD !',
+    tryAgain: 'RÉESSAYER',
+    playAgain: 'REJOUER',
+    menu: 'MENU',
+    bestScore: 'RECORD',
+    inviteCopied: "LIEN D'INVITATION COPIÉ",
+    enterCode: 'ENTRE UN CODE À 4 LETTRES',
+    findingOpponent: "RECHERCHE D'ADVERSAIRE",
+    waitingOpponent: "EN ATTENTE D'UN ADVERSAIRE",
+    players: 'JOUEURS',
+    modeLabel: 'MODE',
+    mapLabel: 'CARTE',
+    weaponsLabel: 'ARMES',
+    pointsToWin: 'POINTS GAGNANTS',
+    killsToWin: 'KILLS GAGNANTS',
+    teamKills: 'KILLS ÉQUIPE',
+    firstTo: 'PREMIER À',
+    warmup: 'ÉCHAUFFEMENT - RIEN NE COMPTE',
+    victory: 'VICTOIRE',
+    defeat: 'DÉFAITE',
+    youWin: 'TU GAGNES',
+    youLose: 'TU PERDS',
+    yourTeamWins: 'TON ÉQUIPE GAGNE',
+    fight: 'COMBATTEZ !',
+    getReady: 'TIENS-TOI PRÊT',
+    ctrlRun: 'COURIR',
+    ctrlSprint: 'SPRINTER',
+    ctrlJump: 'SAUT, ENCORE = DOUBLE SAUT',
+    ctrlJet: 'JETPACK',
+    ctrlDrop: 'DESCENDRE',
+    ctrlShoot: 'TIRER',
+    ctrlAlt: 'GRENADE / BLINK / C4',
+    ctrlWeap: 'ARMES, Q PRÉCÉDENTE, MOLETTE',
+    ctrlMelee: 'COUP - BRISE LE DÉCOR DEVANT TOI',
+    ctrlBuild: 'BUILDER : CÔTÉ = MUR, HAUT/BAS = SOL, T STYLE',
+    ctrlTab: 'SCORES (MAINTENIR)',
+    ctrlEsc: 'MENU',
+    waitInMenu: 'ATTENDRE AU MENU / JOUER SOLO',
+    standbyRoom: "EN ATTENTE D'ADVERSAIRE",
+    copyShort: 'COPIER LIEN',
+    returnRoom: 'RETOURNER',
+    closeRoom: 'ANNULER',
+    opponentJoinedDuel: 'A REJOINT — DUEL LANCÉ !',
+    opponentJoinedRoom: 'A REJOINT TON SALON !',
+    loadoutLabel: 'ARSENAL',
+    riftDrops: 'LARGAGES RIFT',
+    fullArsenal: 'COMPLET',
+    mysteryDrop: 'CAISSE MYSTÈRE',
+    buffTurbo: 'BOTTES TURBO',
+    buffOverdrive: 'SURPUISSANCE',
+    buffShield: 'BOUCLIER',
+    buffFrenzy: 'FRÉNÉSIE',
+  },
+};
+
+function detectLang() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === 'fr' || saved === 'en') return saved;
+  } catch {
+    /* storage blocked */
+  }
+  return typeof navigator !== 'undefined' && String(navigator.language || '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+}
+
+let current = detectLang();
+const listeners = new Set();
+
+export const getLang = () => current;
+
+export function tr(key) {
+  return STRINGS[current]?.[key] ?? STRINGS.en[key] ?? key;
+}
+
+export function applyDomI18n() {
+  document.documentElement.lang = current;
+  for (const el of document.querySelectorAll('[data-i18n]')) {
+    el.textContent = tr(el.dataset.i18n);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-placeholder]')) {
+    el.placeholder = tr(el.dataset.i18nPlaceholder);
+  }
+  const btn = document.getElementById('btn-lang');
+  if (btn) btn.textContent = current === 'fr' ? 'FR ▾ EN' : 'EN ▾ FR';
+}
+
+export function setLang(lang) {
+  current = lang === 'fr' ? 'fr' : 'en';
+  try {
+    localStorage.setItem(STORAGE_KEY, current);
+  } catch {
+    /* storage blocked */
+  }
+  applyDomI18n();
+  for (const fn of listeners) fn(current);
+}
+
+export function toggleLang() {
+  setLang(current === 'fr' ? 'en' : 'fr');
+}
+
+export function onLangChange(fn) {
+  listeners.add(fn);
+}

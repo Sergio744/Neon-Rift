@@ -1,4 +1,4 @@
-import { BTN, CELL, DT, PHYS, RULES } from './constants.js';
+import { BTN, BUFF, BUFF_INFO, CELL, DT, PHYS, RULES } from './constants.js';
 import { CONTINUOUS, FLAME, GRENADE, MELEE, START_OWNED, WEAPONS, fullAmmo, owns } from './weapons.js';
 
 // Player physics shared by the authoritative server and client-side prediction.
@@ -49,6 +49,9 @@ export function createPlayer(slot) {
     sprinting: false,
     owned: START_OWNED,
     mcd: 0,
+    buff: 0,
+    buffT: 0,
+    eshield: 0,
   };
 }
 
@@ -68,6 +71,9 @@ export function resetLoadout(p) {
   p.stamina = RULES.STAMINA;
   p.stamDelay = 0;
   p.sprinting = false;
+  p.buff = 0;
+  p.buffT = 0;
+  p.eshield = 0;
   if (!owns(p.owned, p.w)) p.w = 0;
 }
 
@@ -227,6 +233,23 @@ export function stepPlayer(p, inp, t, out, opts) {
   p.gcd = Math.max(0, p.gcd - dt);
   p.mcd = Math.max(0, (p.mcd || 0) - dt);
   p.shield = Math.max(0, p.shield - dt);
+  if (p.buffT > 0) {
+    p.buffT = Math.max(0, p.buffT - dt);
+    if (p.buffT === 0) {
+      p.buff = 0;
+      p.eshield = 0;
+    }
+  } else if (p.buff) {
+    p.buff = 0;
+    p.eshield = 0;
+  }
+  const turbo = p.buff === BUFF.TURBO;
+  if (turbo) {
+    p.stamina = RULES.STAMINA;
+    p.stamDelay = 0;
+    p.fuel = RULES.FUEL;
+    p.fuelDelay = 0;
+  }
   if (p.flipT >= 0) {
     p.flipT += dt;
     if (p.flipT > PHYS.FLIP_TIME) p.flipT = -1;
@@ -259,33 +282,37 @@ export function stepPlayer(p, inp, t, out, opts) {
   const wantSprint = (b & BTN.SPRINT) !== 0 && dir !== 0;
   if (wantSprint && p.grounded && p.stamina > 0) p.sprinting = true;
   else if (!wantSprint || p.stamina <= 0) p.sprinting = false;
-  if (p.sprinting && p.grounded) {
-    p.stamina = Math.max(0, p.stamina - RULES.STAMINA_DRAIN * dt);
-    p.stamDelay = RULES.STAMINA_DELAY;
-  } else {
-    p.stamDelay = Math.max(0, p.stamDelay - dt);
-    if (p.stamDelay === 0) p.stamina = Math.min(RULES.STAMINA, p.stamina + RULES.STAMINA_REGEN * dt);
+  if (!turbo) {
+    if (p.sprinting && p.grounded) {
+      p.stamina = Math.max(0, p.stamina - RULES.STAMINA_DRAIN * dt);
+      p.stamDelay = RULES.STAMINA_DELAY;
+    } else {
+      p.stamDelay = Math.max(0, p.stamDelay - dt);
+      if (p.stamDelay === 0) p.stamina = Math.min(RULES.STAMINA, p.stamina + RULES.STAMINA_REGEN * dt);
+    }
   }
 
   // Horizontal control.
-  const maxSp = p.jetOn ? PHYS.JET_RUN : p.sprinting ? PHYS.RUN * PHYS.SPRINT : PHYS.RUN;
+  const spMul = turbo ? BUFF_INFO[BUFF.TURBO].speed : 1;
+  const maxSp = (p.jetOn ? PHYS.JET_RUN : p.sprinting ? PHYS.RUN * PHYS.SPRINT : PHYS.RUN) * spMul;
   const target = dir * maxSp;
   let acc;
   if (Math.abs(p.vx) > maxSp && (dir === 0 || dir === Math.sign(p.vx))) {
     acc = p.grounded ? PHYS.GROUND_OVER : PHYS.OVER_ACC;
   } else if (p.grounded) {
-    acc = dir !== 0 && (p.vx === 0 || Math.sign(p.vx) === dir) ? PHYS.GROUND_ACC : PHYS.GROUND_BRAKE;
+    acc = dir !== 0 && (p.vx === 0 || Math.sign(p.vx) === dir) ? PHYS.GROUND_ACC * (turbo ? 1.3 : 1) : PHYS.GROUND_BRAKE;
   } else if (p.jetOn) {
-    acc = dir ? PHYS.JET_ACC_STEER : PHYS.JET_ACC;
+    acc = dir ? PHYS.JET_ACC_STEER * (turbo ? 1.3 : 1) : PHYS.JET_ACC;
   } else {
-    acc = dir ? PHYS.AIR_ACC_STEER : PHYS.AIR_ACC;
+    acc = dir ? PHYS.AIR_ACC_STEER * (turbo ? 1.3 : 1) : PHYS.AIR_ACC;
   }
   p.vx = approach(p.vx, target, acc * dt);
 
   // Jump, then flip (double jump) on a fresh press in the air: one air jump, refilled on landing.
+  const jumpMul = turbo ? BUFF_INFO[BUFF.TURBO].jump : 1;
   let jumped = false;
   if (p.jumpBuf > 0 && (p.grounded || p.coyote > 0)) {
-    p.vy = -PHYS.JUMP_V;
+    p.vy = -PHYS.JUMP_V * jumpMul;
     p.grounded = false;
     p.coyote = 0;
     p.jumpBuf = 0;
@@ -293,7 +320,7 @@ export function stepPlayer(p, inp, t, out, opts) {
     jumped = true;
     if (out) out.push({ k: 'jump' });
   } else if (pressed & BTN.JUMP && !p.grounded && p.flips > 0 && !p.jetOn) {
-    p.vy = Math.min(p.vy, -PHYS.FLIP_V);
+    p.vy = Math.min(p.vy, -PHYS.FLIP_V * jumpMul);
     p.flips--;
     p.jumpBuf = 0;
     p.flipT = 0;
@@ -323,12 +350,14 @@ export function stepPlayer(p, inp, t, out, opts) {
   p.jetK += ((thrusting ? 1 : 0) - p.jetK) * (1 - Math.exp(-kRate * dt));
   if (p.jetK < 0.001) p.jetK = 0;
 
-  if (thrusting) {
-    p.fuel = Math.max(0, p.fuel - RULES.FUEL_DRAIN * dt);
-    p.fuelDelay = RULES.FUEL_DELAY;
-  } else {
-    p.fuelDelay = Math.max(0, p.fuelDelay - dt);
-    if (p.fuelDelay === 0 && p.grounded) p.fuel = Math.min(RULES.FUEL, p.fuel + RULES.FUEL_REGEN * dt);
+  if (!turbo) {
+    if (thrusting) {
+      p.fuel = Math.max(0, p.fuel - RULES.FUEL_DRAIN * dt);
+      p.fuelDelay = RULES.FUEL_DELAY;
+    } else {
+      p.fuelDelay = Math.max(0, p.fuelDelay - dt);
+      if (p.fuelDelay === 0 && p.grounded) p.fuel = Math.min(RULES.FUEL, p.fuel + RULES.FUEL_REGEN * dt);
+    }
   }
 
   // Gravity and thrust.
@@ -340,8 +369,10 @@ export function stepPlayer(p, inp, t, out, opts) {
     p.vy += g * dt;
   }
   if (p.jetK > 0.02) {
-    p.vy -= PHYS.JET_THRUST * p.jetK * dt;
-    if (p.vy < -PHYS.JET_MAX_UP) p.vy += (-PHYS.JET_MAX_UP - p.vy) * Math.min(1, PHYS.JET_DAMP * dt);
+    p.vy -= PHYS.JET_THRUST * (turbo ? 1.16 : 1) * p.jetK * dt;
+    if (p.vy < -PHYS.JET_MAX_UP * (turbo ? 1.2 : 1)) {
+      p.vy += (-PHYS.JET_MAX_UP * (turbo ? 1.2 : 1) - p.vy) * Math.min(1, PHYS.JET_DAMP * dt);
+    }
   }
   const maxFall = dropping ? PHYS.MAX_FALL_DROP : PHYS.MAX_FALL;
   if (p.vy > maxFall) p.vy = maxFall;
@@ -355,15 +386,17 @@ export function stepPlayer(p, inp, t, out, opts) {
   if (!noFire) {
     const held = (b & BTN.FIRE) !== 0;
     const ammo = p.ammo[p.w];
+    const frenzy = p.buff === BUFF.FRENZY;
+    const cdMul = p.buff === BUFF.OVERDRIVE ? BUFF_INFO[BUFF.OVERDRIVE].cd : frenzy ? BUFF_INFO[BUFF.FRENZY].cd : 1;
     if (CONTINUOUS.has(W.kind)) {
-      if (held && ammo !== 0) {
+      if (held && (ammo !== 0 || frenzy)) {
         p.flaming = true;
-        if (ammo > 0) p.ammo[p.w]--;
+        if (ammo > 0 && !frenzy) p.ammo[p.w]--;
       }
-    } else if ((W.auto ? held : p.fireBuf > 0) && p.cd <= 1e-9 && ammo !== 0) {
-      p.cd = Math.max(p.cd, -dt) + W.cd;
+    } else if ((W.auto ? held : p.fireBuf > 0) && p.cd <= 1e-9 && (ammo !== 0 || frenzy)) {
+      p.cd = Math.max(p.cd, -dt) + W.cd * cdMul;
       p.fireBuf = 0;
-      if (ammo > 0) p.ammo[p.w]--;
+      if (ammo > 0 && !frenzy) p.ammo[p.w]--;
       const ox = p.x;
       const oy = p.y - PHYS.AIM_Y;
       if (W.push) {
@@ -387,6 +420,8 @@ export function stepPlayer(p, inp, t, out, opts) {
     }
     if (pressed & BTN.ALT && W.kind === 'c4') {
       if (out) out.push({ k: 'det' });
+    } else if (pressed & BTN.ALT && W.kind === 'blink') {
+      if (out) out.push({ k: 'blink_act' });
     } else if (pressed & BTN.ALT && p.gcd <= 0 && p.nades > 0) {
       p.gcd = GRENADE.cd;
       p.nades--;
@@ -458,6 +493,7 @@ export function packPlayer(p) {
     r2(p.fuel), r2(p.hp), p.ammo.slice(), r3(p.coyote), r3(p.jumpBuf), p.flips, r3(p.jetHold),
     r3(p.jetIgn), r3(p.jetK), r3(p.dropT), r3(p.shield), p.btn, r3(p.fireBuf), r3(p.fuelDelay),
     r3(p.flipT), r2(p.respawnT), r2(p.stamina), r3(p.stamDelay), p.owned,
+    p.buff | 0, r2(p.buffT || 0), r2(p.eshield || 0),
   ];
 }
 
@@ -497,5 +533,8 @@ export function unpackPlayer(a, p) {
   p.stamina = a[26];
   p.stamDelay = a[27];
   p.owned = a[28];
+  p.buff = a[29] | 0;
+  p.buffT = a[30] || 0;
+  p.eshield = a[31] || 0;
   return p;
 }

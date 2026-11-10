@@ -10,17 +10,21 @@ Want to work on one of these? Comment on an existing [Issue](https://github.com/
 
 ## 🇬🇧 English
 
+### ✅ Shipped in Pack 1 & Pack 2
+- [x] **UI Localization Toggle (`EN | FR`):** Live English / Français switcher persisted in `localStorage`.
+- [x] **Neon Rift Palette & Builder Styles:** Neon Cyan / Rift Magenta team & builder blocks + Dimensional Rift cyberpunk sky.
+- [x] **Neon Cyberpunk Arena Map (`NEON CITY`):** Twin skyscrapers, destructible glass chambers, neon skybridges, hover-decks, and central Rift Reactor.
+- [x] **Rift Arsenal Weapons:** **Blink Disc** (impact + mid-air `ALT` teleport), **Prism Rifle** (3-bounce ricochet laser), and **Vortex Orb** (gravitational singularity launcher).
+
 ### 🌱 Starter Ideas (`good first issue`)
-- [ ] **UI Localization Toggle (EN / FR):** Allow players to switch menu and HUD text between English and French in Settings.
-- [ ] **New Neon Builder Styles:** Add cyberpunk / holographic / plasma block palettes to the Builder (`shared/palette.js` & `shared/build.js`).
 - [ ] **Custom Crosshair & Colorblind Accessibility Options:** Extra crosshair shapes and high-contrast player indicators in Pause Settings.
 - [ ] **Post-Match Stats Breakdown:** Show damage dealt, accuracy, blocks destroyed, and blocks built on the match results screen.
+- [ ] **Killstreak & Bank-Shot Callouts:** Bonus toast / announcer callouts for Prism Rifle multi-bounce kills and mid-air Blink eliminations.
 
 ### ⚡ Weapons, Maps & Gameplay (Intermediate)
-- [ ] **Neon Cyberpunk Arena Map (`neon-city`):** Rooftop skyscrapers, destructible neon billboards, glass skybridges, and plasma conduits.
-- [ ] **Rift / Gravity Weapons:** Blink/teleport disc, gravity-well grenade, or ricochet neon laser rifle.
-- [ ] **Map Hazards & Interactive Props:** Jump pads, acid vats, or unstable rift crystals.
-- [ ] **Custom Match Mutators:** Low gravity, jetpack-only, explosive-only, instagib sniper duels, infinite builder.
+- [ ] **Map Hazards & Interactive Props:** Neon jump pads, plasma vats, or unstable rift crystals.
+- [ ] **Custom Match Mutators:** Low gravity, jetpack-only, Rift-only instagib, infinite builder.
+- [ ] **Additional Cyberpunk / Sci-Fi Maps:** Orbital station, subway undercity, or floating data spire.
 
 ### 🏆 Community & Multiplayer Ecosystem (Advanced)
 - [ ] **Spectator Mode:** Watch ongoing 1v1 duels or 8-player tournaments live without taking a player slot.
@@ -34,17 +38,21 @@ Want to work on one of these? Comment on an existing [Issue](https://github.com/
 
 ## 🇫🇷 Français
 
+### ✅ Déjà livré (Pack 1 & Pack 2)
+- [x] **Sélecteur de langue (`EN | FR`) :** Bascule instantanée Anglais / Français mémorisée dans le navigateur.
+- [x] **Identité Neon Rift & Styles Builder :** Palette *Neon Cyan* / *Rift Magenta* + ciel traversé par une faille dimensionnelle et skyline cyberpunk.
+- [x] **Arène `NEON CITY` :** Gratte-ciels jumeaux, salles vitrées destructibles, passerelles néon, plateformes flottantes et réacteur central.
+- [x] **Armes "Rift Arsenal" :** **Blink Disc** (téléportation à l'impact ou en vol via `Clic droit`), **Prism Rifle** (laser à 3 ricochets) et **Vortex Orb** (singularité gravitationnelle).
+
 ### 🌱 Idées pour débuter (`good first issue`)
-- [ ] **Sélecteur de langue (FR / EN) dans l'interface :** Permettre de basculer les menus et le HUD entre français et anglais.
-- [ ] **Nouveaux styles Néon pour le Builder :** Ajouter des matériaux holographiques / cyber-néon (`shared/palette.js` & `shared/build.js`).
 - [ ] **Options d'accessibilité & viseurs personnalisés :** Choix du réticule et mode daltonien dans le menu Pause.
 - [ ] **Statistiques détaillées de fin de partie :** Dégâts infligés, précision, pixels détruits et blocs construits.
+- [ ] **Annonces de tirs spectaculaires :** Badges visuels pour les éliminations par ricochet au *Prism Rifle* ou après téléportation aérienne au *Blink Disc*.
 
 ### ⚡ Armes, Cartes & Gameplay (Intermédiaire)
-- [ ] **Nouvelle carte `neon-city` :** Toits cyberpunk, enseignes néon destructibles, passerelles en verre et réacteurs.
-- [ ] **Armes "Rift" inédites :** Disque de téléportation courte portée, grenade gravitationnelle, fusil laser à ricochets.
-- [ ] **Éléments interactifs sur les cartes :** Tremplins (jump pads), cuves corrosives, cristaux de faille instables.
-- [ ] **Mutateurs de salon privé :** Faible gravité, sniper instagib, munitions explosives uniquement, construction infinie.
+- [ ] **Éléments interactifs sur les cartes :** Tremplins néon (jump pads), cuves à plasma, cristaux de faille instables.
+- [ ] **Mutateurs de salon privé :** Faible gravité, duel Prism instagib, armes Rift uniquement, construction infinie.
+- [ ] **Nouvelles cartes Sci-Fi / Cyberpunk :** Station orbitale, métro souterrain, tour de données flottante.
 
 ### 🏆 Écosystème Communautaire & Compétitif (Avancé)
 - [ ] **Mode Spectateur :** Regarder des duels 1v1 ou des tournois communautaires en direct sans occuper de slot joueur.

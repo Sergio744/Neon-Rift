@@ -1,21 +1,26 @@
 import { SNAP_EVERY } from '../shared/constants.js';
+import { MAPS } from '../shared/maps.js';
 import { randomSeed } from '../shared/rng.js';
 import { MAX_HUMANS, Survival } from '../shared/survival.js';
 import { FULL_POOL, sanitizePool } from '../shared/weapons.js';
 import { processInputs, queueInputs, resetInputs, send, sendSnapshot } from './inputs.js';
 
-// Online co-op survival: up to MAX_HUMANS players against the waves of shared/survival.js.
-// States: 'lobby' (warm-up, anyone can press START or change the weapon pool), 'playing',
-// 'over' (START plays again). Snapshots carry the survival state in `sv` next to the usual Game
-// snapshot fields.
+// Online co-op survival: up to MAX_HUMANS players against waves on any playable map.
+// Defaults to `loadout = 'drops'` (light start + finite ammo + contextual mystery crates + Rift orbs),
+// with `'full'` (all weapons + infinite ammo) available as a lobby option.
 export class CoopRoom {
-  constructor(code, { pool = FULL_POOL } = {}) {
+  constructor(code, { pool = FULL_POOL, map = 'neon', loadout = 'drops' } = {}) {
     this.code = code;
     this.pub = false;
     this.clients = new Array(MAX_HUMANS).fill(null);
     this.state = 'lobby';
+    this.mapId = MAPS[map] && !MAPS[map].hidden ? map : 'neon';
+    this.loadout = loadout === 'full' ? 'full' : 'drops';
     this.pool = sanitizePool(pool);
-    this.run = new Survival(randomSeed(), { lobby: true, pool: this.pool });
+    this.run = new Survival(randomSeed(), {
+      lobby: true, pool: this.pool, map: this.mapId,
+      unlockAll: this.loadout === 'full', riftDrops: this.loadout === 'drops',
+    });
   }
 
   get game() {
@@ -37,7 +42,8 @@ export class CoopRoom {
 
   info() {
     return {
-      t: 'coop', code: this.code, st: this.state, pool: this.pool, names: this.clients.map((c) => (c ? c.name : null)),
+      t: 'coop', code: this.code, st: this.state, pool: this.pool, map: this.mapId, loadout: this.loadout,
+      names: this.clients.map((c) => (c ? c.name : null)),
     };
   }
 
@@ -67,27 +73,58 @@ export class CoopRoom {
     this.broadcast(this.info());
   }
 
-  // Anyone in the lobby (or on the game over panel) can change the weapon pool of the next run.
-  // Warm-up arsenals follow right away; clients rebuild their hotbar from the `pool` in info().
-  setOpts(client, { pool }) {
-    if (this.state === 'playing') return;
-    const next = sanitizePool(pool, this.pool);
-    if (next === this.pool) return;
-    this.pool = next;
-    if (this.state === 'lobby') this.run.setPool(next);
+  setMap(_client, map) {
+    if (this.state === 'playing' || !MAPS[map] || MAPS[map].hidden || map === this.mapId) return;
+    this.mapId = map;
+    if (this.state === 'lobby') {
+      this.run.setMap(map);
+      this.broadcast(this.mapMsg());
+    }
     this.broadcast(this.info());
   }
 
-  // Starts a run (from the lobby or after a game over) on a fresh map with everyone present.
-  begin() {
+  // Anyone in the lobby (or on the game over panel) can change the weapon pool, loadout or map of the next run.
+  setOpts(_client, { pool, map, loadout } = {}) {
     if (this.state === 'playing') return;
-    this.run = new Survival(randomSeed(), { pool: this.pool });
-    for (const c of this.clients) {
-      if (!c) continue;
-      this.run.addHuman(c.slot);
-      this.game.players[c.slot].btn = c.last.b;
+    let changed = false;
+    if (map && MAPS[map] && !MAPS[map].hidden && map !== this.mapId) {
+      this.mapId = map;
+      if (this.state === 'lobby') {
+        this.run.setMap(map);
+        this.broadcast(this.mapMsg());
+      }
+      changed = true;
     }
+    if ((loadout === 'drops' || loadout === 'full') && loadout !== this.loadout) {
+      this.loadout = loadout;
+      if (this.state === 'lobby') this.run.setLoadout(this.loadout);
+      changed = true;
+    }
+    if (pool !== undefined) {
+      const next = sanitizePool(pool, this.pool);
+      if (next !== this.pool) {
+        this.pool = next;
+        if (this.state === 'lobby') {
+          this.run.setPool(this.pool);
+          this.broadcast(this.mapMsg());
+        }
+        changed = true;
+      }
+    }
+    if (changed) this.broadcast(this.info());
+  }
+
+  // Anyone in the crew can start (or retry after game over).
+  begin(_client, map) {
+    if (this.state === 'playing' || this.count < 1) return;
+    if (map && MAPS[map] && !MAPS[map].hidden) this.mapId = map;
     this.state = 'playing';
+    this.run = new Survival(randomSeed(), {
+      pool: this.pool, map: this.mapId,
+      unlockAll: this.loadout === 'full', riftDrops: this.loadout === 'drops',
+    });
+    for (let s = 0; s < MAX_HUMANS; s++) if (this.clients[s]) this.run.addHuman(s);
+    this.game.takeEvents();
     this.broadcast(this.mapMsg());
     this.broadcast(this.info());
   }

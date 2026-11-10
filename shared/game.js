@@ -32,6 +32,7 @@ export class Game {
     this.allowFire = true;
     this.scoring = false;
     this.cratesOn = false; // supply crates and ammo boxes drop from the sky
+    this.riftDrops = false; // contextual mystery weapon crates + temporary Rift boost orbs + finite ammo
     this.armoryOn = false; // everyone unlocks the next pool weapon every `armoryEvery` s (unused by 1v1)
     this.armoryEvery = RULES.ARMORY_EVERY;
     this.infiniteAmmo = false; // every weapon spawns and refills at -1 (1v1 matches)
@@ -67,8 +68,9 @@ export class Game {
     this.flameW = new Array(this.n).fill(0);
     this.buildN = 0;
     this.hazard = Array.from({ length: this.n }, () => ({ fire: 0 }));
-    this.crateT = RULES.CRATE_FIRST;
-    this.ammoT = RULES.AMMO_FIRST;
+    this.crateT = this.riftDrops ? 5 + this.rng() * 5.5 : RULES.CRATE_FIRST;
+    this.orbT = 8 + this.rng() * 7;
+    this.ammoT = this.riftDrops ? 4.5 + this.rng() * 4 : RULES.AMMO_FIRST;
     this.armoryT = this.armoryEvery;
   }
 
@@ -136,6 +138,7 @@ export class Game {
   spawnAt(slot, x, y) {
     const p = this.players[slot];
     const btn = p.btn;
+    if (this.riftDrops && this.autoRespawn) p.owned = this.baseOwned;
     resetLoadout(p);
     if (this.infiniteAmmo) p.ammo.fill(-1);
     p.btn = btn;
@@ -161,6 +164,7 @@ export class Game {
       if (a.k === 'fire') this.fire(slot, a, inp.s, lag, inp.k | 0);
       else if (a.k === 'nade') this.throwNade(slot, a, inp.s);
       else if (a.k === 'det') this.detonateC4(slot);
+      else if (a.k === 'blink_act') this.activateBlink(slot);
       else if (a.k === 'melee') this.melee(slot, a.a);
       else if (a.k === 'bump') this.brush(slot, a.d);
     }

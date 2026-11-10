@@ -89,7 +89,7 @@ export const brain = {
       // Aim: lead moving targets, rockets go for the feet, plus a wandering error.
       let ax = tx;
       let ay = ty;
-      if (W.kind === 'rocket' || W.kind === 'mirv') {
+      if (W.kind === 'rocket' || W.kind === 'mirv' || W.kind === 'vortex') {
         const lt = dist / W.speed;
         ax += target.vx * lt * 0.7;
         ay = target.grounded ? target.y - 6 : ty;

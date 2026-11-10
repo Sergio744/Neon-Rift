@@ -11,5 +11,5 @@ export const MODES = {
 export const GROUP_MODES = ['ffa', 'teams'];
 export const GROUP_MAX = 8;
 
-export const TEAM_NAMES = ['ORANGE', 'BLUE'];
-export const TEAM_COLORS = ['#ff7b22', '#4d8bff'];
+export const TEAM_NAMES = ['NEON', 'RIFT'];
+export const TEAM_COLORS = ['#3ee6ff', '#ff4d9d'];

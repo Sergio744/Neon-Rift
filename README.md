@@ -20,6 +20,16 @@ Every bullet, rocket, flamethrower burst, and laser cutter carves through the wo
 > **Attribution & Non-Affiliation:**
 > **Neon Rift** is inspired by and forked from **[Stick Duel](https://github.com/Melvynx/stick-duel)** ([game.melvynx.dev](https://game.melvynx.dev)), created by **[Melvynx](https://melvynx.com)**, with his explicit permission. It is an **independent, community-driven project** and is **not an official project** of Melvynx or his channel. See [`NOTICE.md`](NOTICE.md) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 
+### 🌌 What's New in Neon Rift
+
+- **Neon Rift Identity & Dimensional Sky** — Neon Cyan vs Rift Magenta duels beneath a procedural cyberpunk skyline and glowing dimensional sky tear.
+- **`NEON CITY` Signature Arena** — Default 1v1 destructible cyberpunk rooftop map featuring twin skyscrapers, shatterable glass chambers, neon skybridges, hover-decks, and a central Rift Reactor.
+- **Original Rift Weapons & `RIFT ARSENAL` Preset:**
+  - **Blink Disc** — Launch a phase disc to teleport on impact (or press `Right Click` / `G` / `E` mid-flight to blink early, refill your air flip, and trigger a zero-self-damage rift pulse).
+  - **Prism Rifle** — Crystalline laser beam that bounces up to **3 times** off solid walls (+15% damage per ricochet) with a live first-bounce aim guide.
+  - **Vortex Orb** — Dark-matter launcher that anchors into a gravitational singularity, lifting and pulling enemies inward before imploding.
+- **Built-in `EN | FR` Switcher** — Live English / Français toggle right from the main menu.
+
 ### 🎮 Game Modes
 
 - **1v1 Duels** — Instant quick-match matchmaking or private 4-letter invite rooms (`?room=ABCD`) with customizable score goals and weapon pools.
@@ -36,7 +46,7 @@ git clone https://github.com/Sergio744/Neon-Rift.git
 cd Neon-Rift
 npm install
 npm run dev      # Starts server at http://localhost:3030 (auto-restarts on changes)
-npm test         # Runs the 65-test deterministic physics, terrain & multiplayer suite
+npm test         # Runs the 71-test deterministic physics, terrain, Rift weapons & multiplayer suite
 ```
 
 Environment variables:
@@ -54,7 +64,7 @@ Keys use **physical keyboard positions** (`KeyboardEvent.code`), so **WASD (QWER
 | `Space` | Jump · Tap again in mid-air to flip · Hold for jetpack |
 | `S` | Fast-fall / Drop through one-way platforms |
 | `Left Click` | Shoot / Place build piece |
-| `Right Click` | Throw grenade / Detonate sticky C4 |
+| `Right Click` *(or `G` / `E`)* | Throw grenade / Blink mid-air (`Blink Disc`) / Detonate sticky C4 |
 | `1`–`9`, `Wheel`, `Q` *(or `A`)* | Switch weapon / Quick-swap last weapon |
 | `F` | Melee shove (breaches terrain in front of you & knocks back foes) |
 | `B` + `T` | Builder tool (aim sideways = wall, up/down = floor, `T` cycles material style) |
@@ -92,6 +102,16 @@ Chaque balle, roquette, lance-flammes ou découpeur laser creuse le décor en te
 > **Attribution & Non-affiliation :**
 > **Neon Rift** est inspiré et dérivé de **[Stick Duel](https://github.com/Melvynx/stick-duel)** ([game.melvynx.dev](https://game.melvynx.dev)), créé par **[Melvynx](https://melvynx.com)**, avec son aimable accord. Il s'agit d'un **projet communautaire indépendant** et **non d'un projet officiel** de Melvynx ou de sa chaîne. Voir [`NOTICE.md`](NOTICE.md) et [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
 
+### 🌌 Nouveautés propres à Neon Rift
+
+- **Identité visuelle Neon Rift** — Duels *Neon Cyan* vs *Rift Magenta* sous un ciel traversé par une faille dimensionnelle et une skyline cyberpunk procédurale.
+- **Arène signature `NEON CITY`** — Carte 1v1 par défaut mêlant gratte-ciels jumeaux, salles vitrées destructibles, passerelles néon, plateformes flottantes et réacteur central.
+- **Armes inédites & preset `RIFT ARSENAL` :**
+  - **Blink Disc** — Disque de phase téléportant le tireur à l'impact (ou en plein vol avec `Clic droit` / `G` / `E`, rechargeant le double saut et libérant une onde de choc sans auto-dégâts).
+  - **Prism Rifle** — Fusil laser rebondissant jusqu'à **3 fois** sur les murs (+15 % de dégâts par ricochet) avec aperçu pointillé du premier rebond.
+  - **Vortex Orb** — Orbe de matière noire s'ancrant en singularité gravitationnelle : soulève et aspire les adversaires avant d'imploser.
+- **Sélecteur `EN | FR` intégré** — Bascule instantanée Français / Anglais depuis l'écran titre.
+
 ### 🎮 Modes de jeu
 
 - **Duels 1v1** — Matchmaking rapide en un clic ou salons privés par code à 4 lettres (`?room=ABCD`) avec choix de la carte, du score et des armes.
@@ -108,7 +128,7 @@ git clone https://github.com/Sergio744/Neon-Rift.git
 cd Neon-Rift
 npm install
 npm run dev      # Lance le serveur sur http://localhost:3030 (rechargement auto)
-npm test         # Lance les 65 tests automatisés (physique, terrain, salons, co-op)
+npm test         # Lance les 71 tests automatisés (physique, terrain, armes Rift, salons, co-op)
 ```
 
 ### 🕹️ Contrôles (AZERTY & QWERTY natifs)
@@ -121,7 +141,7 @@ Le jeu détecte la **position physique des touches** : **ZQSD (AZERTY)** et **WA
 | `Espace` | Sauter · Réappuyer en l'air pour un double saut · Maintenir pour le jetpack |
 | `S` | Descendre d'une plateforme / chute rapide |
 | `Clic gauche` | Tirer / Poser une construction |
-| `Clic droit` | Lancer une grenade / Faire exploser le C4 |
+| `Clic droit` *(ou `G` / `E`)* | Lancer une grenade / Téléporter en vol (`Blink Disc`) / Explosif C4 |
 | `1`–`9`, `Molette`, `A` *(AZERTY)* / `Q` *(QWERTY)* | Changer d'arme / Revenir à l'arme précédente |
 | `F` | Coup d'épaule (brise le décor devant soi et repousse l'adversaire) |
 | `B` + `T` | Mode construction (viser sur le côté = mur, haut/bas = sol, `T` change le matériau) |

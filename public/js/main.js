@@ -1,17 +1,19 @@
 import { CREW_COLORS, INTERP_TICKS, PLAYER_COLORS, TICK_MS } from '/shared/constants.js';
+import { MAPS, MAP_IDS, mapSize } from '/shared/maps.js';
 import { TEAM_NAMES } from '/shared/modes.js';
 import { ENEMIES, MAX_HUMANS, SURVIVAL_SLOTS } from '/shared/survival.js';
 import { POOLS, POOL_IDS } from '/shared/weapons.js';
 import { Sfx } from './audio.js';
 import { Fx, drawText } from './fx.js';
 import { ClientGame } from './game.js';
+import { applyDomI18n, onLangChange, toggleLang, tr } from './i18n.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { SoloServer } from './solo.js';
-import { poolPicker } from './ui/controls.js';
+import { chips, poolPicker, settingRow } from './ui/controls.js';
 import { createFeel } from './ui/feel.js';
 import { createHud } from './ui/hud.js';
-import { createRoomUi, isGroup, ranking, slotColor } from './ui/room.js';
+import { createRoomUi, isGroup, ranking, sizeTag, slotColor } from './ui/room.js';
 
 const $ = (sel) => document.querySelector(sel);
 const canvas = $('#view');
@@ -48,17 +50,22 @@ const ui = {
   wavebar: $('#wavebar'),
   soloOver: $('#solo-over'),
   coopWait: $('#coop-wait'),
+  parkedBar: $('#parked-bar'),
+  matchAlert: $('#match-alert'),
 };
 
-let maps = [];
+let maps = MAP_IDS.map((id) => ({ id, name: MAPS[id].name, w: mapSize(id).w, h: mapSize(id).h }));
 // Weapon picker data (from the server hello, with local defaults so the menu renders offline).
 let poolPresets = POOL_IDS.map((id) => ({ id, name: POOLS[id].name, mask: POOLS[id].mask }));
 // 'menu' | 'room' (online duel or group room, see room.mode) | 'solo' (local waves) | 'coop' (online waves)
 let mode = 'menu';
 let coop = null; // last co-op room info
 let sv = null; // last survival state, solo or co-op
+let survNextMap = 'neon';
 let crewNames = [];
 let room = null;
+let parkedRoom = null; // { code, mode } while a private room waits in the background
+let alertTimer = null;
 let lastState = '';
 let countdownEnd = 0;
 let lastBeep = -1;
@@ -102,16 +109,70 @@ function inviteLink(code) {
   return `${location.origin}/?room=${code}`;
 }
 
-async function copyInvite() {
-  const code = room?.code ?? coop?.code;
-  if (!code) return;
-  const link = inviteLink(code);
+const copyTimers = new WeakMap();
+
+function copyText(text) {
+  let ok = false;
   try {
-    await navigator.clipboard.writeText(link);
-    toast('INVITE LINK COPIED');
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus({ preventScroll: true });
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    ok = document.execCommand('copy');
+    ta.remove();
   } catch {
-    toast(link);
+    /* fallback failed */
   }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+  return ok;
+}
+
+function copyInvite(e) {
+  const code = room?.code ?? coop?.code ?? parkedRoom?.code;
+  if (!code) return;
+  copyText(inviteLink(code));
+  sfx.play('switch');
+  const btn = e?.currentTarget;
+  if (btn instanceof HTMLElement) {
+    const key = btn.dataset.i18n || 'copyInvite';
+    clearTimeout(copyTimers.get(btn));
+    btn.classList.add('copied');
+    btn.textContent = `✓ ${tr('inviteCopied')}`;
+    copyTimers.set(
+      btn,
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.textContent = tr(key);
+      }, 1500),
+    );
+  }
+}
+
+function renderParkedBar() {
+  const on = Boolean(parkedRoom) && mode !== 'room' && mode !== 'coop';
+  show(ui.parkedBar, on);
+  if (!on) return;
+  $('#pb-code').textContent = parkedRoom.code;
+  ui.parkedBar.classList.toggle('compact', mode === 'solo');
+}
+
+function showMatchAlert(text) {
+  ui.matchAlert.textContent = text;
+  show(ui.matchAlert, true);
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(() => show(ui.matchAlert, false), 3600);
+}
+
+function parkCurrentRoom() {
+  if (!room || room.pub || room.st !== 'waiting') return;
+  sfx.play('switch');
+  net.send({ t: 'park' });
 }
 
 // ---------- menu ----------
@@ -138,31 +199,62 @@ ui.code.addEventListener('keydown', (e) => {
 function join(code) {
   code = String(code || '').toUpperCase().trim();
   if (code.length !== 4) {
-    toast('ENTER A 4-LETTER CODE');
+    toast(tr('enterCode'));
     return;
   }
   sfx.unlock();
+  if (parkedRoom && parkedRoom.code !== code) {
+    parkedRoom = null;
+    renderParkedBar();
+  }
   net.send({ t: 'join', name: playerName(), code });
 }
 
 $('#btn-quick').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'quick', name: playerName() });
 });
 $('#btn-create').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'create', name: playerName() }); // map and weapons are picked in the waiting room
 });
 $('#btn-group').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'create', name: playerName(), mode: 'ffa' });
 });
 $('#btn-coop').addEventListener('click', () => {
   sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
   net.send({ t: 'coop', name: playerName() });
 });
-$('#btn-coop-start').addEventListener('click', () => net.send({ t: 'start' }));
+$('#btn-coop-start').addEventListener('click', () => {
+  sfx.unlock();
+  if (mode === 'solo') beginSoloWaves();
+  else net.send({ t: 'start' });
+});
+$('#btn-cw-fold').addEventListener('click', () => {
+  const folded = !ui.coopWait.classList.contains('folded');
+  setCoopFolded(folded);
+});
 $('#btn-copy3').addEventListener('click', copyInvite);
+$('#btn-pb-copy').addEventListener('click', copyInvite);
+$('#btn-pb-return').addEventListener('click', () => {
+  sfx.unlock();
+  net.send({ t: 'unpark' });
+});
+$('#btn-pb-cancel').addEventListener('click', () => {
+  sfx.play('switch');
+  parkedRoom = null;
+  renderParkedBar();
+  net.send({ t: 'leave' });
+});
 $('#btn-join').addEventListener('click', () => join(ui.code.value));
 $('#btn-join-invite').addEventListener('click', () => join(inviteCode));
 if (inviteCode) {
@@ -186,7 +278,7 @@ function loadBest() {
 
 function renderBest() {
   const best = loadBest();
-  $('#solo-best').textContent = best ? `BEST SCORE ${best}` : '';
+  $('#solo-best').textContent = best ? `${tr('bestScore')} ${best}` : '';
 }
 
 function flash(text, sub, ms) {
@@ -227,21 +319,81 @@ function enterSurvival(m) {
   center('', '', false);
 }
 
+const survivalMapItems = () => maps.map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+const loadoutItems = () => [
+  { id: 'drops', name: tr('riftDrops') },
+  { id: 'full', name: tr('fullArsenal') },
+];
+
+function setCoopFolded(on) {
+  ui.coopWait.classList.toggle('folded', on);
+  const fold = $('#btn-cw-fold');
+  if (fold) {
+    fold.textContent = on ? tr('show') : tr('hide');
+    fold.setAttribute('aria-expanded', String(!on));
+  }
+}
+
+function renderSoloLobby() {
+  show(ui.coopWait, true);
+  $('#cw-title').textContent = tr('soloTitle');
+  show($('#cw-count'), false);
+  show($('#cw-code-row'), false);
+  show($('#cw-players'), false);
+  $('#cw-hint').textContent = tr('soloHint');
+  settingRow($('#cw-maps'), tr('mapLabel'), survivalMapItems(), solo.mapId, (id) => {
+    solo.setMap(id);
+    hud.reset();
+    feel.reset();
+    renderSoloLobby();
+  });
+  settingRow($('#cw-loadout'), tr('loadoutLabel'), loadoutItems(), solo.loadout, (loadout) => {
+    solo.setLoadout(loadout);
+    hud.reset();
+    renderSoloLobby();
+  });
+  poolPicker($('#cw-pool'), poolPresets, solo.pool, (pool) => {
+    solo.setPool(pool);
+    hud.reset();
+    renderSoloLobby();
+  });
+}
+
+function renderSurvivalLobby() {
+  if (mode === 'solo') renderSoloLobby();
+  else if (mode === 'coop' && coop) onCoop(coop);
+}
+
 function startSolo() {
   sfx.unlock();
   enterSurvival('solo');
+  setCoopFolded(false);
+  renderParkedBar();
   crewNames = [playerName()];
   game.net = solo;
-  solo.start(playerName());
+  solo.openLobby(playerName());
   ui.netinfo.textContent = 'SOLO';
-  flash('GET READY', 'DEFEND THE OUTPOST', 1300);
+  renderSoloLobby();
+}
+
+function beginSoloWaves(nextMap) {
+  show(ui.coopWait, false);
+  show(ui.soloOver, false);
+  show(ui.pause, false);
+  solo.begin(nextMap);
+  hud.reset();
+  feel.reset();
+  helpOnStart();
+  input.enabled = true;
+  input.releaseAll();
+  flash(tr('getReady'), game.mapName || '', 1300);
 }
 
 function exitSolo() {
   solo.stop();
   game.net = net;
   renderBest();
-  toMenu();
+  toMenu({ keepParked: true });
 }
 
 const crewName = (s) => crewNames[s] || `P${s + 1}`;
@@ -308,6 +460,14 @@ function soloClear(n, bonus) {
   flash('WAVE CLEAR', `+${bonus} BONUS - HP AND AMMO RESTORED`, 2200);
 }
 
+function renderSurvivalOverMaps() {
+  chips($('#so-maps'), survivalMapItems(), survNextMap, (id) => {
+    survNextMap = id;
+    if (mode === 'coop') net.send({ t: 'setmap', map: id });
+    renderSurvivalOverMaps();
+  });
+}
+
 function soloOver(stats) {
   const best = loadBest();
   const isNew = mode === 'solo' && stats.score > best;
@@ -318,6 +478,8 @@ function soloOver(stats) {
       /* storage blocked */
     }
   }
+  survNextMap = mode === 'coop' ? (coop?.map || 'neon') : solo.mapId;
+  renderSurvivalOverMaps();
   $('#so-wave').textContent = stats.wave;
   $('#so-kills').textContent = stats.kills;
   $('#so-score').textContent = stats.score;
@@ -333,13 +495,23 @@ function soloOver(stats) {
 
 // ---------- co-op ----------
 
+let lastCoopCode = null;
 function applyCoop(msg) {
   const prev = coop;
   coop = msg;
   crewNames = msg.names.map((n) => n || '');
   const lobby = msg.st === 'lobby';
+  if (lobby && msg.code !== lastCoopCode) {
+    lastCoopCode = msg.code;
+    setCoopFolded(false);
+  }
   show(ui.coopWait, lobby);
   if (lobby) {
+    $('#cw-title').textContent = tr('coopTitle');
+    show($('#cw-count'), true);
+    show($('#cw-code-row'), true);
+    show($('#cw-players'), true);
+    $('#cw-hint').textContent = tr('shareCoop');
     $('#cw-code').textContent = msg.code;
     const list = $('#cw-players');
     list.textContent = '';
@@ -351,8 +523,18 @@ function applyCoop(msg) {
       list.appendChild(row);
     });
     setText($('#cw-count'), `${msg.names.filter(Boolean).length}/${MAX_HUMANS}`);
+    settingRow($('#cw-maps'), tr('mapLabel'), survivalMapItems(), msg.map || 'neon', (id) =>
+      net.send({ t: 'setmap', map: id }),
+    );
+    settingRow($('#cw-loadout'), tr('loadoutLabel'), loadoutItems(), msg.loadout || 'drops', (loadout) =>
+      net.send({ t: 'setopts', loadout }),
+    );
     poolPicker($('#cw-pool'), poolPresets, msg.pool, (pool) => net.send({ t: 'setopts', pool }));
     game.setPool(msg.pool);
+  }
+  if (msg.st === 'over' && !ui.soloOver.classList.contains('hidden') && msg.map) {
+    survNextMap = msg.map;
+    renderSurvivalOverMaps();
   }
   if (msg.st === 'playing' && prev && prev.st !== 'playing') {
     show(ui.soloOver, false);
@@ -362,13 +544,15 @@ function applyCoop(msg) {
     helpOnStart();
     input.enabled = true;
     input.releaseAll();
-    flash('GET READY', 'DEFEND THE OUTPOST TOGETHER', 1300);
+    flash(tr('getReady'), game.mapName || '', 1300);
   }
 }
 
 if (new URLSearchParams(location.search).has('debug')) window.sd = { game, solo };
 $('#btn-solo').addEventListener('click', startSolo);
-$('#btn-retry').addEventListener('click', () => (mode === 'coop' ? net.send({ t: 'start' }) : startSolo()));
+$('#btn-retry').addEventListener('click', () =>
+  mode === 'coop' ? net.send({ t: 'start', map: survNextMap }) : beginSoloWaves(survNextMap),
+);
 $('#btn-solo-menu').addEventListener('click', leave);
 renderBest();
 
@@ -376,6 +560,13 @@ renderBest();
 
 function setPaused(on) {
   if (!game.active) return;
+  const canPark =
+    mode === 'room' &&
+    Boolean(room) &&
+    !room.pub &&
+    room.st === 'waiting' &&
+    room.names.filter(Boolean).length === 1;
+  show($('#btn-park2'), canPark);
   show(ui.pause, on);
   input.enabled = !on && ui.over.classList.contains('hidden') && ui.soloOver.classList.contains('hidden');
   if (on) input.releaseAll();
@@ -438,12 +629,15 @@ function leave() {
     exitSolo();
     return;
   }
+  parkedRoom = null;
   net.send({ t: 'leave' });
   toMenu();
 }
 
 // Back to the menu from any mode, restoring the 1v1 HUD defaults.
-function toMenu() {
+function toMenu({ keepParked = false } = {}) {
+  if (solo.active) solo.stop();
+  if (!keepParked) parkedRoom = null;
   mode = 'menu';
   room = null;
   coop = null;
@@ -463,20 +657,23 @@ function toMenu() {
   show(ui.scoreboard, true);
   show(ui.wavebar, false);
   show($('#btn-copy2'), true);
+  show($('#btn-park2'), false);
   $('#pause-note').textContent = 'THE MATCH KEEPS RUNNING';
-  $('#btn-leave').textContent = 'LEAVE MATCH';
+  $('#btn-leave').textContent = tr('leaveMatch');
   center('', '', false);
   show(ui.hud, false);
   show(ui.pause, false);
   show(ui.over, false);
   show(ui.menu, true);
   clearTimeout(overTimer);
-  history.replaceState(null, '', '/');
+  history.replaceState(null, '', parkedRoom ? `/?room=${parkedRoom.code}` : '/');
   input.enabled = false;
+  renderParkedBar();
 }
 
 $('#btn-resume').addEventListener('click', () => setPaused(false));
 $('#btn-copy2').addEventListener('click', copyInvite);
+$('#btn-park2').addEventListener('click', parkCurrentRoom);
 $('#btn-mute').addEventListener('click', () => {
   sfx.setMuted(!sfx.muted);
   updateMuteLabel();
@@ -508,7 +705,9 @@ updateMuteLabel();
 const survivalMode = () => mode === 'solo' || mode === 'coop';
 // The kill feed says YOU everywhere but in a duel, where both names are on the scoreboard.
 const hud = createHud({ game, sfx, showYou: () => survivalMode() || isGroup(room) });
-const roomUi = createRoomUi({ game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite });
+const roomUi = createRoomUi({
+  game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite, onPark: parkCurrentRoom,
+});
 const feel = createFeel({ game, sfx, survival: survivalMode });
 const SOLO_DEATH_RULE = {
   duel: 'THAT DEATH SCORES FOR YOUR OPPONENT',
@@ -641,7 +840,7 @@ input.on('board', (on) => {
 // After a dropped connection, try to get back into the same room once the socket is back.
 let rejoinCode = null;
 net.on('open', () => {
-  ui.conn.textContent = 'CONNECTED';
+  ui.conn.textContent = tr('connected');
   ui.conn.classList.remove('bad');
   if (rejoinCode) {
     net.send({ t: 'join', name: playerName(), code: rejoinCode });
@@ -649,8 +848,12 @@ net.on('open', () => {
   }
 });
 net.on('close', () => {
-  ui.conn.textContent = 'RECONNECTING...';
+  ui.conn.textContent = tr('reconnecting');
   ui.conn.classList.add('bad');
+  if (parkedRoom) {
+    parkedRoom = null;
+    renderParkedBar();
+  }
   if (game.active && !solo.active) {
     rejoinCode = (mode === 'room' ? room?.code : coop?.code) ?? null;
     toMenu();
@@ -661,7 +864,17 @@ net.on('hello', (msg) => {
   maps = msg.maps;
   if (msg.pools?.length) poolPresets = msg.pools;
 });
+net.on('parked', (msg) => {
+  parkedRoom = { code: msg.code, mode: msg.mode };
+  toMenu({ keepParked: true });
+});
 net.on('joined', (msg) => {
+  if (solo.active) solo.stop();
+  game.net = net;
+  game.pending = [];
+  game.offset = null;
+  parkedRoom = null;
+  renderParkedBar();
   if (msg.mode === 'coop') {
     enterSurvival('coop');
     game.roomState = 'playing';
@@ -670,6 +883,7 @@ net.on('joined', (msg) => {
   } else {
     if (mode !== 'room') toMenu();
     mode = 'room';
+    renderParkedBar();
   }
   game.setSlot(msg.slot);
   history.replaceState(null, '', `/?room=${msg.code}`);
@@ -686,6 +900,11 @@ net.on('joined', (msg) => {
   feel.reset();
   helpOnStart();
   center('', '', false);
+  if (msg.opponent) {
+    sfx.play('unlock');
+    const suffix = msg.mode === 'duel' ? tr('opponentJoinedDuel') : tr('opponentJoinedRoom');
+    showMatchAlert(`⚡ ${msg.opponent} · ${tr('roomLabel')} ${msg.code} — ${suffix}`);
+  }
 });
 net.on('map', (msg) => {
   game.loadMap(msg);
@@ -719,10 +938,10 @@ net.on('lobby', () => {
   const lg = $('#logo').getContext('2d');
   lg.imageSmoothingEnabled = false;
   lg.clearRect(0, 0, 200, 40);
-  drawText(lg, 'NEON', 56, 6, PLAYER_COLORS[2], 3);
+  drawText(lg, 'NEON', 56, 6, PLAYER_COLORS[0], 3);
   const slash = [
-    [104, 5, PLAYER_COLORS[2]],
-    [103, 9, PLAYER_COLORS[2]],
+    [104, 5, PLAYER_COLORS[0]],
+    [103, 9, PLAYER_COLORS[0]],
     [101, 13, '#f4f1ff'],
     [105, 16, PLAYER_COLORS[1]],
     [103, 20, '#f4f1ff'],
@@ -737,6 +956,15 @@ net.on('lobby', () => {
   }
   drawText(lg, 'RIFT', 148, 6, PLAYER_COLORS[1], 3);
 })();
+
+$('#btn-lang')?.addEventListener('click', toggleLang);
+onLangChange(() => {
+  ui.conn.textContent = net.open ? tr('connected') : tr('connecting');
+  renderBest();
+  if (!ui.coopWait.classList.contains('hidden')) renderSurvivalLobby();
+  if (!ui.soloOver.classList.contains('hidden')) renderSurvivalOverMaps();
+});
+applyDomI18n();
 
 // ---------- per-frame HUD ----------
 

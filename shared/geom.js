@@ -62,3 +62,84 @@ export function railTrace(t, x, y, a, range, maxPen) {
   }
   return { x2: x + dx * d, y2: y + dy * d, len: d };
 }
+
+// Prism Rifle beam: deterministic multi-bounce ricochet ray off solid terrain/walls.
+// Returns `pts` = [x0, y0, x1, y1, ...] (vertices of polyline) and `hits` = [{ x, y }] bounce points.
+export function prismTrace(t, x, y, a, range, maxBounces) {
+  let cx = x;
+  let cy = y;
+  let dx = Math.cos(a);
+  let dy = Math.sin(a);
+  let rem = range;
+  const W = t.w * CELL;
+  const H = t.h * CELL;
+  const pts = [x, y];
+  const hits = [];
+  const step = 2;
+
+  for (let b = 0; b <= maxBounces && rem > 0; b++) {
+    let bounced = false;
+    while (rem > 0) {
+      const nx = cx + dx * step;
+      const ny = cy + dy * step;
+      rem -= step;
+      if (ny < -400 || nx < 0 || nx > W || ny > H) {
+        pts.push(nx, ny);
+        rem = 0;
+        break;
+      }
+      if (t.blocksShot(nx, ny)) {
+        pts.push(nx, ny);
+        hits.push({ x: nx, y: ny });
+        if (b === maxBounces) {
+          rem = 0;
+          break;
+        }
+        const bx = t.blocksShot(cx + dx * step, cy);
+        const by = t.blocksShot(cx, cy + dy * step);
+        if (bx && !by) {
+          dx = -dx;
+        } else if (by && !bx) {
+          dy = -dy;
+        } else {
+          // Estimate local surface normal from 5x5 cell neighbourhood for slopes/craters.
+          let gx = 0;
+          let gy = 0;
+          const hc = Math.floor(nx / CELL);
+          const hr = Math.floor(ny / CELL);
+          for (let oy = -2; oy <= 2; oy++) {
+            for (let ox = -2; ox <= 2; ox++) {
+              if (!ox && !oy) continue;
+              if (SHOT[t.cell(hc + ox, hr + oy)]) {
+                gx -= ox;
+                gy -= oy;
+              }
+            }
+          }
+          const glen = Math.hypot(gx, gy);
+          if (glen > 0.5 && (gx * dx + gy * dy) / glen < -0.05) {
+            const mx = gx / glen;
+            const my = gy / glen;
+            const dot = dx * mx + dy * my;
+            dx -= 2 * dot * mx;
+            dy -= 2 * dot * my;
+          } else {
+            dx = -dx;
+            dy = -dy;
+          }
+        }
+        cx += dx * step;
+        cy += dy * step;
+        bounced = true;
+        break;
+      }
+      cx = nx;
+      cy = ny;
+    }
+    if (!bounced && rem <= 0 && pts[pts.length - 2] !== cx && pts[pts.length - 1] !== cy) {
+      pts.push(cx, cy);
+    }
+  }
+  if (pts.length < 4) pts.push(cx, cy);
+  return { pts, hits };
+}

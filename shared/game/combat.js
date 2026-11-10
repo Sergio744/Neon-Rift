@@ -1,10 +1,10 @@
 import { bodyCells, freeCells, partHits, planPiece, unpackBuild } from '../build.js';
-import { CELL, DT, MAT_BUILD, MAT_SAND, PHYS } from '../constants.js';
+import { BUFF, CELL, DT, MAT_BUILD, MAT_SAND, PHYS } from '../constants.js';
 import { COLLIDE, HARD } from '../materials.js';
-import { playerBox, railTrace, segAabb } from '../geom.js';
-import { PROJ, ROCKET } from '../projectiles.js';
+import { playerBox, prismTrace, railTrace, segAabb } from '../geom.js';
+import { PROJ, ROCKET, VORTEX_P } from '../projectiles.js';
 import { OP } from '../sim.js';
-import { BEAM, C4, FLAME, GRENADE, MELEE, RAIL, SPRAY, WEAPONS, pelletDirs } from '../weapons.js';
+import { BEAM, C4, FLAME, GRENADE, MELEE, PRISM, RAIL, SPRAY, WEAPONS, pelletDirs } from '../weapons.js';
 
 const BODY_MID = PHYS.HEIGHT / 2;
 const BUILD_COLORS = 3; // TEAM style: brick, steel, sandstone (palette BUILD order), one per player slot
@@ -45,6 +45,15 @@ export const combat = {
       case 'c4':
         this.throwC4(slot, a, W, seq);
         break;
+      case 'blink':
+        this.launchBlink(slot, a, W, seq);
+        break;
+      case 'prism':
+        this.prism(slot, a.w, a.x, a.y, a.a, lag);
+        break;
+      case 'vortex':
+        this.launchVortex(slot, a, W, seq, lag);
+        break;
     }
   },
 
@@ -79,9 +88,10 @@ export const combat = {
 
   // Sticky charge: clings to the first surface it touches until its owner detonates it (ALT).
   throwC4(slot, a, W, seq) {
+    const p = this.players[slot];
     const mine = this.projs.filter((pr) => pr.k === PROJ.C4 && pr.o === slot);
     if (mine.length >= C4.max) {
-      this.players[slot].ammo[a.w]++;
+      if (p.ammo[a.w] >= 0 && p.buff !== BUFF.FRENZY) p.ammo[a.w]++;
       return;
     }
     this.projs.push({
@@ -97,6 +107,79 @@ export const combat = {
       pr.cook = 1 + n++ * 3; // ripple: one charge every 3 ticks
     }
     if (n) this.emit({ e: 'det', s: slot });
+  },
+
+  // Blink Disc: launches a teleportation disc; firing a new one replaces any in-flight disc of this slot.
+  launchBlink(slot, a, W, seq) {
+    this.projs = this.projs.filter((pr) => !(pr.k === PROJ.BLINK && pr.o === slot));
+    const dx = Math.cos(a.a);
+    const dy = Math.sin(a.a);
+    const wall = this.terrain.raycast(a.x, a.y, dx, dy, W.muzzle);
+    const dist = wall >= 0 ? Math.max(0, wall - 3) : W.muzzle;
+    const ex = a.x + dx * dist;
+    const ey = a.y + dy * dist;
+    this.projs.push({
+      id: this.nextId++, k: PROJ.BLINK, o: slot, x: ex, y: ey, fx: ex, fy: ey,
+      vx: dx * W.speed, vy: dy * W.speed, t: 0, sq: seq, st: 0,
+    });
+  },
+
+  // ALT (right-click) while holding Blink Disc blinks immediately to the in-flight disc.
+  activateBlink(slot) {
+    const idx = this.projs.findIndex((pr) => pr.k === PROJ.BLINK && pr.o === slot);
+    if (idx < 0) return;
+    const [pr] = this.projs.splice(idx, 1);
+    this.completeBlink(slot, pr.fx ?? pr.x, pr.fy ?? pr.y, true);
+  },
+
+  // Vortex Orb: launches a dark-matter orb that anchors into a gravitational singularity.
+  launchVortex(slot, a, W, seq, lag) {
+    const dx = Math.cos(a.a);
+    const dy = Math.sin(a.a);
+    const wall = this.terrain.raycast(a.x, a.y, dx, dy, W.muzzle);
+    const dist = wall >= 0 ? Math.max(0, wall - 3) : W.muzzle;
+    const ex = a.x + dx * dist;
+    const ey = a.y + dy * dist;
+    const hit = this.firstHit(slot, a.x, a.y, ex, ey, 4, lag);
+    const anchorNow = Boolean(hit) || (wall >= 0 && wall < 10);
+    this.projs.push({
+      id: this.nextId++, k: PROJ.VORTEX, o: slot, x: ex, y: ey, fx: ex, fy: ey,
+      vx: anchorNow ? 0 : dx * W.speed + a.vx * 0.25,
+      vy: anchorNow ? 0 : dy * W.speed,
+      t: anchorNow ? VORTEX_P.flight : 0,
+      sq: seq,
+      st: anchorNow ? 1 : 0,
+    });
+  },
+
+  // Prism Rifle: multi-bounce neon laser beam (+15% damage per ricochet).
+  prism(slot, w, x, y, ang, lag) {
+    const { pts, hits } = prismTrace(this.terrain, x, y, ang, PRISM.range, PRISM.bounces);
+    const W = WEAPONS[w];
+    const hitSet = new Set();
+    const segs = (pts.length >> 1) - 1;
+    for (let seg = 0; seg < segs; seg++) {
+      const x1 = pts[seg * 2];
+      const y1 = pts[seg * 2 + 1];
+      const x2 = pts[seg * 2 + 2];
+      const y2 = pts[seg * 2 + 3];
+      const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+      const ux = (x2 - x1) / len;
+      const uy = (y2 - y1) / len;
+      const dmg = Math.round(W.dmg * (1 + seg * PRISM.boost));
+      for (const s of this.targets(slot)) {
+        if (hitSet.has(s)) continue;
+        const o = this.rewound(s, lag);
+        if (!o.alive) continue;
+        const t = segAabb(x1, y1, x2, y2, ...playerBox(o.x, o.y, 2));
+        if (t >= 0) {
+          hitSet.add(s);
+          this.damage(s, dmg, slot, w, ux * 260, uy * 260 - 80, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
+        }
+      }
+    }
+    for (const h of hits) this.op(slot, OP.CARVE, h.x, h.y, PRISM.carve, 0);
+    this.emit({ e: 'pr', s: slot, pts: pts.map(r1) });
   },
 
   // The beam pierces every enemy on its path and bores a tunnel through the terrain.
@@ -123,7 +206,7 @@ export const combat = {
     const { mode, style, dist } = unpackBuild(k);
     const plan = planPiece(this.terrain, p.x, p.y, ang, mode, dist);
     const refund = () => {
-      if (p.ammo[w] >= 0) p.ammo[w]++;
+      if (p.ammo[w] >= 0 && p.buff !== BUFF.FRENZY) p.ammo[w]++;
     };
     if (!plan.parts.length || !freeCells(this.terrain, plan.parts)) return refund();
     for (let s = 0; s < this.n; s++) {

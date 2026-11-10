@@ -123,8 +123,10 @@ export class Lobby {
     if (room.count === 0) this.rooms.delete(room.code);
   }
 
-  createRoom(opts) {
-    const room = opts.coop ? new CoopRoom(this.newCode(), opts) : new Room(this.newCode(), opts);
+  createRoom(opts = {}) {
+    const cfg = { loadout: opts.loadout === 'full' ? 'full' : 'drops', ...opts };
+    cfg.loadout = opts.loadout === 'full' ? 'full' : 'drops';
+    const room = cfg.coop ? new CoopRoom(this.newCode(), cfg) : new Room(this.newCode(), cfg);
     this.rooms.set(room.code, room);
     return room;
   }
@@ -143,21 +145,27 @@ export class Lobby {
       case 'create': {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
-        const room = this.createRoom({ pub: false, map: msg.map, goal: Number(msg.goal), pool: msg.pool, mode: msg.mode });
+        const room = this.createRoom({
+          pub: false, map: msg.map, goal: Number(msg.goal), pool: msg.pool, mode: msg.mode, loadout: msg.loadout,
+        });
         room.join(client);
         break;
       }
       case 'coop': {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
-        this.createRoom({ coop: true, pool: msg.pool }).join(client);
+        this.createRoom({ coop: true, pool: msg.pool, map: msg.map, loadout: msg.loadout }).join(client);
         break;
       }
       case 'start':
-        if (client.room) client.room.begin(client);
+        if (client.room) client.room.begin(client, msg.map);
         break;
       case 'setopts':
-        if (client.room) client.room.setOpts?.(client, { pool: msg.pool, goal: msg.goal, mode: msg.mode });
+        if (client.room) {
+          client.room.setOpts?.(client, {
+            pool: msg.pool, goal: msg.goal, mode: msg.mode, map: msg.map, loadout: msg.loadout,
+          });
+        }
         break;
       case 'team':
         if (client.room instanceof Room) client.room.setTeam(client, msg.team);
@@ -166,13 +174,22 @@ export class Lobby {
         const code = String(msg.code ?? '').toUpperCase().trim();
         const room = this.rooms.get(code);
         if (!room) return this.send(client, { t: 'err', m: 'ROOM NOT FOUND' });
-        if (room === client.room) return;
+        if (room === client.room) {
+          if (room instanceof Room && room.parked[client.slot]) room.unpark(client);
+          return;
+        }
         if (room.full) return this.send(client, { t: 'err', m: 'ROOM IS FULL' });
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
         room.join(client);
         break;
       }
+      case 'park':
+        if (client.room instanceof Room) client.room.park(client);
+        break;
+      case 'unpark':
+        if (client.room instanceof Room) client.room.unpark(client);
+        break;
       case 'quick': {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
@@ -191,7 +208,7 @@ export class Lobby {
         if (client.room instanceof Room) client.room.requestRematch(client, msg.map);
         break;
       case 'setmap':
-        if (client.room instanceof Room) client.room.setMap(client, String(msg.map ?? ''));
+        if (client.room) client.room.setMap?.(client, String(msg.map ?? ''));
         break;
       case 'leave':
         this.leaveRoom(client);

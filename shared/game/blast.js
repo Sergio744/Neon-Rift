@@ -1,15 +1,36 @@
-import { DT, PHYS, RULES } from '../constants.js';
+import { BUFF, BUFF_INFO, DT, PHYS, RULES } from '../constants.js';
+import { ITEM } from './items.js';
 import { boxDist, playerBox, segAabb } from '../geom.js';
-import { BOMBLET, GONE, HIT_WALL, MIRV, PROJ, QUAKE, ROCKET, TIMER, mirvBomblets, stepProj } from '../projectiles.js';
+import {
+  BLINK_P, BOMBLET, GONE, HIT_WALL, MIRV, PROJ, QUAKE, ROCKET, TIMER, VORTEX_P, mirvBomblets, stepProj,
+} from '../projectiles.js';
 import { CRUMBLE_F, IGNITE_F, OP } from '../sim.js';
-import { BOOMS, GRENADE, WEAPONS } from '../weapons.js';
+import { BOOMS, GRENADE, VORTEX, WEAPONS } from '../weapons.js';
 
 const BODY_MID = PHYS.HEIGHT / 2;
 const BULLET_LIFE = 1.2;
 const r1 = (v) => Math.round(v * 10) / 10;
 
-const PADS = { [PROJ.ROCKET]: ROCKET.pad, [PROJ.MIRV]: MIRV.pad, [PROJ.BOMBLET]: BOMBLET.pad, [PROJ.QUAKE]: QUAKE.pad };
-const BOOM_OF = { [PROJ.ROCKET]: 'rocket', [PROJ.MIRV]: 'mirv', [PROJ.BOMBLET]: 'bomblet', [PROJ.QUAKE]: 'quake' };
+const PADS = {
+  [PROJ.ROCKET]: ROCKET.pad,
+  [PROJ.MIRV]: MIRV.pad,
+  [PROJ.BOMBLET]: BOMBLET.pad,
+  [PROJ.QUAKE]: QUAKE.pad,
+  [PROJ.BLINK]: BLINK_P.pad,
+  [PROJ.VORTEX]: VORTEX_P.pad,
+};
+const BOOM_OF = {
+  [PROJ.ROCKET]: 'rocket',
+  [PROJ.MIRV]: 'mirv',
+  [PROJ.BOMBLET]: 'bomblet',
+  [PROJ.QUAKE]: 'quake',
+  [PROJ.VORTEX]: 'vortex',
+};
+
+const BLINK_OFFSETS = [
+  [0, 22], [0, 4], [0, 30], [0, -10], [-10, 16], [10, 16],
+  [-16, 0], [16, 0], [0, -24], [-22, 12], [22, 12], [0, 38],
+];
 
 // Damage, deaths, explosions, bullets and projectile flight.
 export const blasts = {
@@ -23,7 +44,26 @@ export const blasts = {
       return;
     }
     let dmg = raw ? amount * RULES.WORLD_DAMAGE : by === v ? amount * RULES.SELF_DAMAGE : amount * (this.dealMul[by] ?? 1);
+    if (!raw && by >= 0 && by !== v && this.players[by]?.buff === BUFF.OVERDRIVE) {
+      dmg *= BUFF_INFO[BUFF.OVERDRIVE].dmg;
+    }
     dmg *= this.takeMul[v];
+    if (!raw && p.eshield > 0) {
+      const absorbed = Math.min(p.eshield, dmg);
+      p.eshield = Math.max(0, p.eshield - absorbed);
+      dmg -= absorbed;
+      if (p.eshield <= 0 && p.buff === BUFF.SHIELD) {
+        p.buff = 0;
+        p.buffT = 0;
+      }
+      if (dmg <= 0.01) {
+        p.vx += kx * 0.45;
+        p.vy += ky * 0.45;
+        if (ky * 0.45 < -60) p.grounded = false;
+        this.emit({ e: 'i', x: r1(hx), y: r1(hy), a: 0, sh: 1 });
+        return;
+      }
+    }
     p.hp = Math.max(raw ? Math.min(p.hp, RULES.WORLD_FLOOR) : 0, p.hp - dmg);
     p.vx += kx;
     p.vy += ky;
@@ -39,15 +79,21 @@ export const blasts = {
     p.jetOn = false;
     p.jetK = 0;
     p.flaming = false;
+    p.buff = 0;
+    p.buffT = 0;
+    p.eshield = 0;
     p.respawnT = this.autoRespawn ? RULES.RESPAWN : 0;
     this.flameAcc[v].clear();
     this.emit({ e: 'd', s: v, by, w, x: r1(p.x), y: r1(p.y), vx: r1(p.vx), vy: r1(p.vy) });
     this.dropPack(p.x, p.y - 20);
+    if (this.riftDrops && this.cratesOn && this.rng() < 0.24 && this.items.filter((c) => c.kind === ITEM.ORB).length < 3) {
+      this.dropOrb(p.x + (this.rng() - 0.5) * 28, p.y - 26);
+    }
     if (this.onKill) this.onKill(v, by, w);
   },
 
-  // Knockback hits everyone in range; damage only the owner's enemies and the owner itself.
-  // `radius` overrides the blast size (TNT scales with the charge).
+  // Knockback hits everyone in range; damage only the owner's enemies and the owner itself
+  // (unless `B.noSelf` is set, e.g. Blink Disc arrival pulse).
   explode(x, y, type, owner, radius) {
     const B = BOOMS[type];
     const R = radius ?? B.r;
@@ -56,6 +102,7 @@ export const blasts = {
     if (B.quake) this.op(owner, OP.QUAKE, x, y, B.quake);
     this.emit({ e: 'b', x: r1(x), y: r1(y), r: Math.round(R), k: type, o: owner });
     for (let s = 0; s < this.n; s++) {
+      if (B.noSelf && s === owner) continue;
       const p = this.players[s];
       if (!this.present[s] || p.dead) continue;
       const d = boxDist(x, y, p.x, p.y);
@@ -87,6 +134,76 @@ export const blasts = {
       if (!near) continue;
       if (pr.k === PROJ.GRENADE) pr.t = Math.max(pr.t, GRENADE.fuse - 0.08);
       else if (pr.k === PROJ.C4 && !pr.cook) pr.cook = 2;
+    }
+  },
+
+  // Resolves a safe arrival position around (tx, ty), teleports `slot` and releases a rift shockwave.
+  completeBlink(slot, tx, ty, midAir = false) {
+    if (slot < 0 || !this.present[slot]) return;
+    const p = this.players[slot];
+    if (p.dead) return;
+    const minX = PHYS.HALF_W + 6;
+    const maxX = this.worldW - PHYS.HALF_W - 6;
+    const minY = PHYS.CEIL_Y + PHYS.HEIGHT + 6;
+    const maxY = this.worldH - 26;
+    const clampX = (v) => Math.max(minX, Math.min(maxX, v));
+    const clampY = (v) => Math.max(minY, Math.min(maxY, v));
+
+    let bx = clampX(tx);
+    let by = clampY(ty + 18);
+    let free = false;
+    for (const [ox, oy] of BLINK_OFFSETS) {
+      const cx = clampX(tx + ox);
+      const cy = clampY(ty + oy);
+      if (!this.terrain.rectSolid(cx - PHYS.HALF_W, cy - PHYS.HEIGHT, cx + PHYS.HALF_W, cy)) {
+        bx = cx;
+        by = cy;
+        free = true;
+        break;
+      }
+    }
+    if (!free) {
+      this.op(slot, OP.CARVE, bx, by - BODY_MID, 22, 0);
+    }
+    const oldX = p.x;
+    const oldY = p.y;
+    p.x = bx;
+    p.y = by;
+    p.grounded = false;
+    p.flips = PHYS.FLIPS;
+    p.vx *= 0.25;
+    p.vy = midAir ? Math.min(p.vy, -210) : -120;
+    this.emit({ e: 'tp', s: slot, x1: r1(oldX), y1: r1(oldY - BODY_MID), x2: r1(bx), y2: r1(by - BODY_MID) });
+    this.explode(bx, by - BODY_MID, 'blink', slot);
+  },
+
+  // Gravitational pull & terrain erosion while a Vortex Orb is anchored in singularity state.
+  stepVortexPull(pr) {
+    pr.ticks = (pr.ticks || 0) + 1;
+    if (pr.ticks % VORTEX.carveEvery === 1) {
+      this.op(pr.o, OP.CARVE, pr.x, pr.y, VORTEX.carveR, CRUMBLE_F);
+    }
+    for (let s = 0; s < this.n; s++) {
+      const p = this.players[s];
+      if (!this.present[s] || p.dead) continue;
+      const dx = pr.x - p.x;
+      const dy = pr.y - (p.y - BODY_MID);
+      const dist = Math.hypot(dx, dy);
+      if (dist >= VORTEX.pullR || dist < 1e-3) continue;
+      const falloff = 1 - dist / VORTEX.pullR;
+      const enemy = this.hostile(pr.o, s);
+      const acc = enemy ? VORTEX.pullEnemy * (0.35 + 0.65 * falloff) : VORTEX.pullAlly * falloff;
+      const dv = acc * DT;
+      if (enemy && p.grounded && falloff > 0.12) {
+        p.grounded = false;
+        p.vy = Math.min(p.vy, -95);
+      }
+      p.vx += (dx / dist) * dv;
+      p.vy += (dy / dist) * dv - (enemy ? 16 * falloff : 0);
+      if (dy < -8) p.grounded = false;
+      if (enemy && pr.ticks % VORTEX.carveEvery === 0 && dist < VORTEX.pullR * 0.75) {
+        this.damage(s, VORTEX.dps * VORTEX.carveEvery * DT, pr.o, WEAPONS.findIndex((w) => w.id === 'vortex'), 0, 0, p.x, p.y - BODY_MID);
+      }
     }
   },
 
@@ -143,9 +260,21 @@ export const blasts = {
       }
       const px = pr.x;
       const py = pr.y;
+      const wasAnchored = pr.k === PROJ.VORTEX && pr.st;
       const res = stepProj(pr, this.terrain, DT);
       if (res === GONE) continue;
-      if (PADS[pr.k]) {
+
+      if (pr.k === PROJ.VORTEX && pr.st) {
+        if (res === TIMER) {
+          this.explode(pr.x, pr.y, 'vortex', pr.o);
+          continue;
+        }
+        this.stepVortexPull(pr);
+        keep.push(pr);
+        continue;
+      }
+
+      if (PADS[pr.k] && !wasAnchored) {
         let best = -1;
         for (let s = 0; s < this.n; s++) {
           const p = this.players[s];
@@ -159,17 +288,30 @@ export const blasts = {
           pr.y = py + (pr.y - py) * best;
           pr.fx = pr.x;
           pr.fy = pr.y;
-          this.burst(pr, spawned);
+          if (pr.k === PROJ.BLINK) {
+            this.completeBlink(pr.o, pr.fx, pr.fy, false);
+          } else if (pr.k === PROJ.VORTEX) {
+            pr.st = 1;
+            pr.vx = 0;
+            pr.vy = 0;
+            pr.t = VORTEX_P.flight;
+            this.stepVortexPull(pr);
+            keep.push(pr);
+          } else {
+            this.burst(pr, spawned);
+          }
           continue;
         }
       }
       if (res === HIT_WALL) {
-        this.burst(pr, spawned);
+        if (pr.k === PROJ.BLINK) this.completeBlink(pr.o, pr.fx ?? pr.x, pr.fy ?? pr.y, false);
+        else this.burst(pr, spawned);
         continue;
       }
       if (res === TIMER) {
         if (pr.k === PROJ.GRENADE) this.explode(pr.x, pr.y - 2, 'grenade', pr.o);
         else if (pr.k === PROJ.MIRV) spawned.push(...this.split(pr));
+        else if (pr.k === PROJ.VORTEX) this.explode(pr.x, pr.y, 'vortex', pr.o);
         continue;
       }
       keep.push(pr);
