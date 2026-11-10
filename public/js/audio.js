@@ -198,6 +198,11 @@ export class Sfx {
       case 'pickup':
         for (const [i, f] of [660, 880, 1320].entries()) this.tone({ type: 'square', f0: f, gain: 0.07, decay: 0.07, delay: i * 0.06, pan });
         break;
+      case 'orb':
+        for (const [i, f] of [523, 659, 784, 1046, 1318].entries()) {
+          this.tone({ type: 'triangle', f0: f, f1: f * 1.06, gain: 0.08, decay: 0.11, delay: i * 0.04, pan });
+        }
+        break;
       case 'crate':
         this.tone({ type: 'sine', f0: 520, gain: 0.1, decay: 0.2 });
         this.tone({ type: 'sine', f0: 780, gain: 0.1, decay: 0.3, delay: 0.12 });

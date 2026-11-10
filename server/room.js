@@ -2,7 +2,7 @@ import { DT, RULES, SNAP_EVERY } from '../shared/constants.js';
 import { MAPS } from '../shared/maps.js';
 import { MODES } from '../shared/modes.js';
 import { randomSeed } from '../shared/rng.js';
-import { FULL_POOL, sanitizePool } from '../shared/weapons.js';
+import { FULL_POOL, poolStart, sanitizePool } from '../shared/weapons.js';
 import { Game } from './game.js';
 import { processInputs, queueInputs, resetInputs, send, sendSnapshot } from './inputs.js';
 
@@ -16,7 +16,7 @@ const SPAWN_STEP = 48; // max ground height difference for that side-step
 //   host: only they change the settings and start the match. Players can join mid-match; the
 //   match falls back to the warm-up when too few players (or an empty team) are left.
 export class Room {
-  constructor(code, { pub = false, map, goal, pool = FULL_POOL, mode = 'duel' } = {}) {
+  constructor(code, { pub = false, map, goal, pool = FULL_POOL, mode = 'duel', loadout = 'full' } = {}) {
     this.code = code;
     this.pub = pub;
     this.mode = MODES[mode] ? mode : 'duel';
@@ -24,6 +24,7 @@ export class Room {
     this.max = MODES[this.mode].max;
     this.mapId = MAPS[map] ? map : this.group ? 'canyon' : 'neon';
     this.goal = MODES[this.mode].goals.includes(goal) ? goal : MODES[this.mode].goal;
+    this.loadout = loadout === 'drops' ? 'drops' : 'full';
     this.clients = new Array(this.max).fill(null);
     this.parked = new Array(this.max).fill(false); // creator waiting in menu / solo while room stays reserved
     this.teams = new Array(this.max).fill(-1); // team of each slot in 'teams', -1 elsewhere
@@ -55,9 +56,11 @@ export class Room {
   // Takes effect on the next reset (match start, map change) and for waiting players right away.
   applyPool() {
     const g = this.game;
+    const drops = this.loadout === 'drops';
     g.pool = this.pool;
-    g.startOwned = this.pool;
-    g.baseOwned = this.pool;
+    g.riftDrops = drops;
+    g.startOwned = drops ? poolStart(this.pool) : this.pool;
+    g.baseOwned = g.startOwned;
   }
 
   applyTeams() {
@@ -76,7 +79,7 @@ export class Room {
       t: 'room', code: this.code, mode: this.mode, max: this.max, host: this.host, st: this.state,
       timer: Math.round(this.timer * 100) / 100, goal: this.goal, scores: this.scores, deaths: this.deaths,
       teams: this.teams, teamScores: this.teamScores, names: this.clients.map((c) => (c ? c.name : null)),
-      winner: this.winner, rematch: this.rematch, map: this.mapId, pub: this.pub, pool: this.pool,
+      winner: this.winner, rematch: this.rematch, map: this.mapId, pub: this.pub, pool: this.pool, loadout: this.loadout,
     };
   }
 
@@ -87,11 +90,13 @@ export class Room {
   // Only reads `game` and `state` (the arena harness borrows it for its headless matches).
   applyRules() {
     const g = this.game;
+    const drops = this.loadout === 'drops';
     g.allowFire = this.state !== 'countdown';
     g.scoring = this.state === 'playing';
     g.cratesOn = this.state === 'playing';
+    g.riftDrops = drops;
     g.armoryOn = false;
-    g.infiniteAmmo = true;
+    g.infiniteAmmo = !drops || this.state === 'waiting';
   }
 
   isHost(client) {
@@ -293,14 +298,16 @@ export class Room {
   }
 
   startMatch() {
+    this.state = 'countdown';
+    this.timer = RULES.COUNTDOWN;
+    this.applyPool();
+    this.applyRules();
     this.game.reset(this.mapId, randomSeed());
+    this.applyRules();
     this.applyTeams();
     this.placeAtStart(this.startSpawns());
     this.game.takeEvents();
     this.resetScores();
-    this.state = 'countdown';
-    this.timer = RULES.COUNTDOWN;
-    this.applyRules();
     this.broadcast(this.mapMsg());
     this.broadcast(this.info());
   }
@@ -376,18 +383,20 @@ export class Room {
     this.broadcast(this.info());
   }
 
-  // `pool` and `goal` any room; `mode` (FFA <-> TEAMS) in group rooms. Host only in group rooms.
-  setOpts(client, { pool, goal, mode } = {}) {
+  // `pool`, `loadout` and `goal` any room; `mode` (FFA <-> TEAMS) in group rooms. Host only in group rooms.
+  setOpts(client, { pool, goal, mode, loadout } = {}) {
     if (this.state === 'countdown' || this.state === 'playing' || !this.isHost(client)) return;
-    if (pool !== undefined) {
-      this.pool = sanitizePool(pool, this.pool);
+    if (loadout === 'drops' || loadout === 'full') this.loadout = loadout;
+    if (pool !== undefined || loadout === 'drops' || loadout === 'full') {
+      if (pool !== undefined) this.pool = sanitizePool(pool, this.pool);
       this.applyPool();
+      this.applyRules();
       if (this.state === 'waiting') {
         for (let s = 0; s < this.max; s++) {
           const p = this.game.players[s];
           if (!this.clients[s]) continue;
-          p.owned = this.pool;
-          if (!(this.pool & (1 << p.w))) p.w = 0;
+          p.owned = this.game.baseOwned;
+          if (!(p.owned & (1 << p.w))) p.w = 0;
         }
       }
     }

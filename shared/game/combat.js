@@ -1,5 +1,5 @@
 import { bodyCells, freeCells, partHits, planPiece, unpackBuild } from '../build.js';
-import { CELL, DT, MAT_BUILD, MAT_SAND, PHYS } from '../constants.js';
+import { BUFF, CELL, DT, MAT_BUILD, MAT_SAND, PHYS } from '../constants.js';
 import { COLLIDE, HARD } from '../materials.js';
 import { playerBox, prismTrace, railTrace, segAabb } from '../geom.js';
 import { PROJ, ROCKET, VORTEX_P } from '../projectiles.js';
@@ -88,9 +88,10 @@ export const combat = {
 
   // Sticky charge: clings to the first surface it touches until its owner detonates it (ALT).
   throwC4(slot, a, W, seq) {
+    const p = this.players[slot];
     const mine = this.projs.filter((pr) => pr.k === PROJ.C4 && pr.o === slot);
     if (mine.length >= C4.max) {
-      this.players[slot].ammo[a.w]++;
+      if (p.ammo[a.w] >= 0 && p.buff !== BUFF.FRENZY) p.ammo[a.w]++;
       return;
     }
     this.projs.push({
@@ -205,7 +206,7 @@ export const combat = {
     const { mode, style, dist } = unpackBuild(k);
     const plan = planPiece(this.terrain, p.x, p.y, ang, mode, dist);
     const refund = () => {
-      if (p.ammo[w] >= 0) p.ammo[w]++;
+      if (p.ammo[w] >= 0 && p.buff !== BUFF.FRENZY) p.ammo[w]++;
     };
     if (!plan.parts.length || !freeCells(this.terrain, plan.parts)) return refund();
     for (let s = 0; s < this.n; s++) {

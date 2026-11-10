@@ -1,4 +1,5 @@
-import { BTN, DT, INTERP_TICKS, PHYS, PLAYER_COLORS, TICK_MS } from '/shared/constants.js';
+import { BTN, BUFF, DT, INTERP_TICKS, PHYS, PLAYER_COLORS, TICK_MS } from '/shared/constants.js';
+import { ITEM } from '/shared/game/items.js';
 import { buildMap } from '/shared/maps.js';
 import { createPlayer, stepPlayer, unpackPlayer } from '/shared/player.js';
 import { ALIVE, stepProj, unpackProj } from '/shared/projectiles.js';
@@ -222,7 +223,7 @@ export class ClientGame {
 
     const aimAt = { x: (input.mx + this.camBx) * 2, y: (input.my + this.camBy) * 2 };
     if (!me.dead) this.aim = Math.atan2(aimAt.y - (me.y - PHYS.AIM_Y), aimAt.x - me.x);
-    if (pressed & BTN.FIRE && !me.dead && me.ammo[me.w] === 0) {
+    if (pressed & BTN.FIRE && !me.dead && me.ammo[me.w] === 0 && me.buff !== BUFF.FRENZY) {
       this.sfx.play('empty', me.x);
       if (this.wantW !== 0) this.pickWeapon({ abs: 0 });
     }
@@ -385,6 +386,10 @@ export class ClientGame {
       ctx.fillStyle = color;
       ctx.fillRect(px - r, py - r, r * 2 + 1, r * 2 + 1);
     };
+    for (const c of this.items) {
+      if (c.kind === ITEM.MYSTERY) dot(c.x, c.y, '#ff4d9d', 1);
+      else if (c.kind === ITEM.ORB) dot(c.x, c.y, '#ffd23f', 0);
+    }
     for (const s of others) dot(this.remotes[s].x, this.remotes[s].y, this.color(s), 1);
     if (me) dot(me.x, me.y, '#ffffff', 1);
   }
@@ -398,6 +403,7 @@ export class ClientGame {
     drawStick(ctx, {
       x, y, aim, w: p.w, vx: p.vx, vy: p.vy, grounded: p.grounded, jet: p.jetK, flipT: p.flipT, face,
       phase: an.phase, time: this.time, color: this.color(slot), kick: an.kick, shield: p.shield, jetpack: true,
+      buff: p.buff, buffT: p.buffT, eshield: p.eshield,
     });
   }
 
@@ -407,6 +413,7 @@ export class ClientGame {
     return {
       hp: me.hp, fuel: me.fuel, stamina: me.stamina, sprinting: me.sprinting, w: this.wantW, ammo: me.ammo, owned: me.owned,
       nades: me.nades, dead: me.dead, respawnT: me.respawnT, rtt: this.rtt, armory: this.armory,
+      buff: me.buff, buffT: me.buffT, eshield: me.eshield,
       destruction: sim ? sim.destruction : 0, pool: this.pool,
       locked: poolList(this.pool).filter((w) => !owns(me.owned, w)).length,
       build: this.wantW === W.builder ? this.buildHud() : null,

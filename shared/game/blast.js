@@ -1,4 +1,5 @@
-import { DT, PHYS, RULES } from '../constants.js';
+import { BUFF, BUFF_INFO, DT, PHYS, RULES } from '../constants.js';
+import { ITEM } from './items.js';
 import { boxDist, playerBox, segAabb } from '../geom.js';
 import {
   BLINK_P, BOMBLET, GONE, HIT_WALL, MIRV, PROJ, QUAKE, ROCKET, TIMER, VORTEX_P, mirvBomblets, stepProj,
@@ -43,7 +44,26 @@ export const blasts = {
       return;
     }
     let dmg = raw ? amount * RULES.WORLD_DAMAGE : by === v ? amount * RULES.SELF_DAMAGE : amount * (this.dealMul[by] ?? 1);
+    if (!raw && by >= 0 && by !== v && this.players[by]?.buff === BUFF.OVERDRIVE) {
+      dmg *= BUFF_INFO[BUFF.OVERDRIVE].dmg;
+    }
     dmg *= this.takeMul[v];
+    if (!raw && p.eshield > 0) {
+      const absorbed = Math.min(p.eshield, dmg);
+      p.eshield = Math.max(0, p.eshield - absorbed);
+      dmg -= absorbed;
+      if (p.eshield <= 0 && p.buff === BUFF.SHIELD) {
+        p.buff = 0;
+        p.buffT = 0;
+      }
+      if (dmg <= 0.01) {
+        p.vx += kx * 0.45;
+        p.vy += ky * 0.45;
+        if (ky * 0.45 < -60) p.grounded = false;
+        this.emit({ e: 'i', x: r1(hx), y: r1(hy), a: 0, sh: 1 });
+        return;
+      }
+    }
     p.hp = Math.max(raw ? Math.min(p.hp, RULES.WORLD_FLOOR) : 0, p.hp - dmg);
     p.vx += kx;
     p.vy += ky;
@@ -59,10 +79,16 @@ export const blasts = {
     p.jetOn = false;
     p.jetK = 0;
     p.flaming = false;
+    p.buff = 0;
+    p.buffT = 0;
+    p.eshield = 0;
     p.respawnT = this.autoRespawn ? RULES.RESPAWN : 0;
     this.flameAcc[v].clear();
     this.emit({ e: 'd', s: v, by, w, x: r1(p.x), y: r1(p.y), vx: r1(p.vx), vy: r1(p.vy) });
     this.dropPack(p.x, p.y - 20);
+    if (this.riftDrops && this.cratesOn && this.rng() < 0.24 && this.items.filter((c) => c.kind === ITEM.ORB).length < 3) {
+      this.dropOrb(p.x + (this.rng() - 0.5) * 28, p.y - 26);
+    }
     if (this.onKill) this.onKill(v, by, w);
   },
 

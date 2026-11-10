@@ -77,10 +77,12 @@ function roster(n, crew, rng) {
 export class Survival {
   // `lobby`: players warm up (auto respawn, infinite warm-up ammo, no waves) until `begin()`.
   // `map`: any playable map in MAPS.
-  // `unlockAll`: when true, humans own the entire `pool` from second 1 (matching online modes).
-  constructor(seed, { lobby = false, pool = FULL_POOL, map = SURVIVAL_MAP, unlockAll = false } = {}) {
+  // `riftDrops`: contextual mystery weapon crates + temporary Rift boost orbs + finite ammo.
+  // `unlockAll`: full arsenal + infinite ammo from second 1.
+  constructor(seed, { lobby = false, pool = FULL_POOL, map = SURVIVAL_MAP, unlockAll = false, riftDrops = false } = {}) {
     this.mapId = MAPS[map] && !MAPS[map].hidden ? map : SURVIVAL_MAP;
     this.unlockAll = Boolean(unlockAll);
+    this.riftDrops = Boolean(riftDrops) && !this.unlockAll;
     this.pool = sanitizePool(pool);
     this.reset(seed, lobby);
   }
@@ -89,12 +91,15 @@ export class Survival {
     const g = new Game(this.mapId, seed, SURVIVAL_SLOTS);
     g.team = g.team.map((_, s) => (isHuman(s) ? 0 : 1));
     g.autoRespawn = lobby;
-    g.infiniteAmmo = lobby;
+    g.infiniteAmmo = lobby || this.unlockAll;
     g.cratesOn = !lobby;
+    g.riftDrops = this.riftDrops;
     g.canLoot = g.canLoot.map((_, s) => isHuman(s));
     g.pool = this.pool;
     g.startOwned = this.unlockAll ? this.pool : poolStart(this.pool);
     g.baseOwned = g.startOwned;
+    g.crateT = this.riftDrops ? 4.5 : g.crateT;
+    g.orbT = 7.5;
     g.onKill = (v, by) => this.onKill(v, by);
     this.game = g;
     this.seed = seed;
@@ -153,10 +158,19 @@ export class Survival {
     for (const s of this.humans()) {
       const p = g.players[s];
       p.owned = g.baseOwned;
-      if (this.lobby) p.ammo.fill(-1);
+      if (this.lobby || this.unlockAll) p.ammo.fill(-1);
       else p.ammo = fullAmmo();
       if (!(p.owned & (1 << p.w))) p.w = 0;
     }
+  }
+
+  setLoadout(loadout) {
+    this.unlockAll = loadout === 'full';
+    this.riftDrops = loadout === 'drops';
+    const g = this.game;
+    g.riftDrops = this.riftDrops;
+    g.infiniteAmmo = this.lobby || this.unlockAll;
+    this.setPool(this.pool);
   }
 
   // Switches the warm-up map while keeping all connected humans in place.
@@ -355,10 +369,26 @@ export class Survival {
       if (h.out) this.revive(s);
       else if (!p.dead) {
         p.hp = Math.min(100, p.hp + WAVE_HEAL);
-        p.ammo = fullAmmo();
-        p.nades = GRENADE.count;
+        if (this.riftDrops) {
+          for (let w = 0; w < p.ammo.length; w++) {
+            const full = fullAmmo()[w];
+            if (full > 0 && (p.owned & (1 << w)) && p.ammo[w] >= 0) {
+              p.ammo[w] = Math.min(full, p.ammo[w] + Math.ceil(full * 0.4));
+            }
+          }
+          p.nades = Math.min(GRENADE.count, p.nades + 1);
+        } else if (!this.unlockAll) {
+          p.ammo = fullAmmo();
+          p.nades = GRENADE.count;
+        } else {
+          p.nades = GRENADE.count;
+        }
       }
-      g.grant(s, g.nextLocked(s));
+      if (!this.riftDrops && !this.unlockAll) g.grant(s, g.nextLocked(s));
+    }
+    if (this.riftDrops) {
+      g.dropMystery();
+      if (this.wave % 2 === 0) g.dropOrb();
     }
     if (this.wave % 5 === 0 && this.lives < maxLives(this.crewSize())) {
       this.lives++;

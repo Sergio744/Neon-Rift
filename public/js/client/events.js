@@ -1,9 +1,22 @@
+import { BUFF, BUFF_INFO } from '/shared/constants.js';
 import { PALETTE } from '/shared/maps.js';
 import { ITEM } from '/shared/game/items.js';
 import { WEAPONS } from '/shared/weapons.js';
+import { tr } from '../i18n.js';
 import { stickSegments } from '../render.js';
 
-const PICKUP_TEXT = { [ITEM.AMMO]: ['+AMMO', '#ffd23f'], [ITEM.PACK]: ['+AMMO', '#e8c77e'] };
+const PICKUP_TEXT = {
+  [ITEM.AMMO]: ['+AMMO', '#ffd23f'],
+  [ITEM.PACK]: ['+AMMO', '#e8c77e'],
+  [ITEM.MYSTERY]: ['+25 HP', '#ff4d9d'],
+};
+
+const ORB_KEYS = {
+  [BUFF.TURBO]: 'buffTurbo',
+  [BUFF.OVERDRIVE]: 'buffOverdrive',
+  [BUFF.SHIELD]: 'buffShield',
+  [BUFF.FRENZY]: 'buffFrenzy',
+};
 
 // Server events turned into effects, sounds, HUD callbacks and local unlocks (mixin of ClientGame).
 export const events = {
@@ -94,6 +107,9 @@ export const events = {
       case 'k':
         this.pickupFx(ev);
         break;
+      case 'orb':
+        this.orbFx(ev);
+        break;
       case 'u':
         this.unlockFx(ev);
         break;
@@ -124,20 +140,34 @@ export const events = {
     const [label, col] = PICKUP_TEXT[ev.kind] || ['+HP +AMMO', '#45d483'];
     this.fx.text(ev.x, ev.y - 40, label, col, 1, 1.1);
     this.fx.ring(ev.x, ev.y - 12, 6, 40, col, 0.35);
-    this.sfx.play(ev.kind === ITEM.CRATE ? 'pickup' : 'ammo', ev.x);
+    this.sfx.play(ev.kind === ITEM.CRATE || ev.kind === ITEM.MYSTERY ? 'pickup' : 'ammo', ev.x);
   },
 
-  // A weapon became available: to one player (crate, wave reward) or to everyone (s = -1, armory).
+  orbFx(ev) {
+    const info = BUFF_INFO[ev.b];
+    const col = info ? info.color : '#ffd23f';
+    const label = tr(ORB_KEYS[ev.b] || 'buffTurbo');
+    this.fx.text(ev.x, ev.y - 44, `+${label}`, col, 1.2, 1.25);
+    this.fx.ring(ev.x, ev.y - 12, 4, 46, col, 0.38);
+    this.sfx.play('orb', ev.x);
+    if (ev.s === this.slot && info) {
+      this.me.buff = ev.b;
+      this.me.buffT = info.dur;
+      if (ev.b === BUFF.SHIELD) this.me.eshield = info.hp;
+    }
+  },
+
+  // A weapon became available: to one player (crate, mystery drop, wave reward) or to everyone (s = -1, armory).
   unlockFx(ev) {
     const me = this.me;
     const W = WEAPONS[ev.w];
     const forMe = ev.s === this.slot || ev.s === -1;
     if (forMe) {
       me.owned |= 1 << ev.w;
-      me.ammo[ev.w] = W.ammo;
+      if (me.ammo[ev.w] >= 0) me.ammo[ev.w] = ev.ref ? Math.ceil(W.ammo * 1.5) : W.ammo;
       this.sfx.play('unlock');
       if (!me.dead) this.fx.unlockFx(me.x, me.y, this.color(this.slot));
-      if (this.onUnlock) this.onUnlock(ev.w, ev.s === -1);
+      if (this.onUnlock) this.onUnlock(ev.w, ev.s === -1, Boolean(ev.mys));
       if (ev.s === this.slot && !me.dead) this.pickWeapon({ abs: ev.w });
     } else {
       const p = this.playerAt(ev.s);

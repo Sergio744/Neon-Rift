@@ -5,18 +5,22 @@ import { MAX_HUMANS, Survival } from '../shared/survival.js';
 import { FULL_POOL, sanitizePool } from '../shared/weapons.js';
 import { processInputs, queueInputs, resetInputs, send, sendSnapshot } from './inputs.js';
 
-// Online co-op survival: up to MAX_HUMANS players against waves on any playable map, with full
-// access to the chosen weapon pool right from wave 1 (matching online duel/group modes).
-// States: 'lobby' (warm-up, anyone can press START or change map/weapons), 'playing', 'over'.
+// Online co-op survival: up to MAX_HUMANS players against waves on any playable map.
+// Defaults to `loadout = 'drops'` (light start + finite ammo + contextual mystery crates + Rift orbs),
+// with `'full'` (all weapons + infinite ammo) available as a lobby option.
 export class CoopRoom {
-  constructor(code, { pool = FULL_POOL, map = 'neon' } = {}) {
+  constructor(code, { pool = FULL_POOL, map = 'neon', loadout = 'drops' } = {}) {
     this.code = code;
     this.pub = false;
     this.clients = new Array(MAX_HUMANS).fill(null);
     this.state = 'lobby';
     this.mapId = MAPS[map] && !MAPS[map].hidden ? map : 'neon';
+    this.loadout = loadout === 'full' ? 'full' : 'drops';
     this.pool = sanitizePool(pool);
-    this.run = new Survival(randomSeed(), { lobby: true, pool: this.pool, map: this.mapId, unlockAll: true });
+    this.run = new Survival(randomSeed(), {
+      lobby: true, pool: this.pool, map: this.mapId,
+      unlockAll: this.loadout === 'full', riftDrops: this.loadout === 'drops',
+    });
   }
 
   get game() {
@@ -38,7 +42,7 @@ export class CoopRoom {
 
   info() {
     return {
-      t: 'coop', code: this.code, st: this.state, pool: this.pool, map: this.mapId,
+      t: 'coop', code: this.code, st: this.state, pool: this.pool, map: this.mapId, loadout: this.loadout,
       names: this.clients.map((c) => (c ? c.name : null)),
     };
   }
@@ -79,8 +83,8 @@ export class CoopRoom {
     this.broadcast(this.info());
   }
 
-  // Anyone in the lobby (or on the game over panel) can change the weapon pool or map of the next run.
-  setOpts(_client, { pool, map } = {}) {
+  // Anyone in the lobby (or on the game over panel) can change the weapon pool, loadout or map of the next run.
+  setOpts(_client, { pool, map, loadout } = {}) {
     if (this.state === 'playing') return;
     let changed = false;
     if (map && MAPS[map] && !MAPS[map].hidden && map !== this.mapId) {
@@ -91,28 +95,36 @@ export class CoopRoom {
       }
       changed = true;
     }
+    if ((loadout === 'drops' || loadout === 'full') && loadout !== this.loadout) {
+      this.loadout = loadout;
+      if (this.state === 'lobby') this.run.setLoadout(this.loadout);
+      changed = true;
+    }
     if (pool !== undefined) {
       const next = sanitizePool(pool, this.pool);
       if (next !== this.pool) {
         this.pool = next;
-        if (this.state === 'lobby') this.run.setPool(next);
+        if (this.state === 'lobby') {
+          this.run.setPool(this.pool);
+          this.broadcast(this.mapMsg());
+        }
         changed = true;
       }
     }
     if (changed) this.broadcast(this.info());
   }
 
-  // Starts a run (from the lobby or after a game over) on a fresh map with everyone present.
+  // Anyone in the crew can start (or retry after game over).
   begin(_client, map) {
-    if (this.state === 'playing') return;
+    if (this.state === 'playing' || this.count < 1) return;
     if (map && MAPS[map] && !MAPS[map].hidden) this.mapId = map;
-    this.run = new Survival(randomSeed(), { pool: this.pool, map: this.mapId, unlockAll: true });
-    for (const c of this.clients) {
-      if (!c) continue;
-      this.run.addHuman(c.slot);
-      this.game.players[c.slot].btn = c.last.b;
-    }
     this.state = 'playing';
+    this.run = new Survival(randomSeed(), {
+      pool: this.pool, map: this.mapId,
+      unlockAll: this.loadout === 'full', riftDrops: this.loadout === 'drops',
+    });
+    for (let s = 0; s < MAX_HUMANS; s++) if (this.clients[s]) this.run.addHuman(s);
+    this.game.takeEvents();
     this.broadcast(this.mapMsg());
     this.broadcast(this.info());
   }

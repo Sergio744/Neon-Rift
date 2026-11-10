@@ -5,8 +5,8 @@ import { FULL_POOL, sanitizePool } from '/shared/weapons.js';
 const PLAYER = 0;
 
 // Local stand-in for the online server in solo survival: runs shared/survival.js in the browser
-// with one human, full access to all maps and weapon pools (matching online modes), and hands
-// snapshots straight to ClientGame.
+// with one human, full map & weapon pool parity with online modes, and defaults to `loadout = 'drops'`
+// (light start + finite ammo + contextual mystery weapon crates + temporary Rift boost orbs).
 export class SoloServer {
   constructor(client, { onSnapshot } = {}) {
     this.client = client;
@@ -15,6 +15,7 @@ export class SoloServer {
     this.paused = false;
     this.state = 'lobby';
     this.mapId = 'neon';
+    this.loadout = 'drops';
     this.pool = FULL_POOL;
     this.name = 'PLAYER';
     this.run = null;
@@ -26,7 +27,10 @@ export class SoloServer {
 
   mountRun({ lobby }) {
     const seed = (Math.random() * 2 ** 31) | 0;
-    this.run = new Survival(seed, { lobby, pool: this.pool, map: this.mapId, unlockAll: true });
+    this.run = new Survival(seed, {
+      lobby, pool: this.pool, map: this.mapId,
+      unlockAll: this.loadout === 'full', riftDrops: this.loadout === 'drops',
+    });
     this.queue = [];
     const c = this.client;
     c.setSlot(PLAYER);
@@ -35,7 +39,7 @@ export class SoloServer {
     c.interp = 2;
     c.roomState = 'playing';
     c.offset = null;
-    c.loadMap({ id: this.mapId, seed }, this.run.game);
+    c.loadMap({ id: this.mapId, seed, wp: this.pool }, this.run.game);
     c.pending = [];
     this.ack = c.seq;
     this.run.addHuman(PLAYER);
@@ -45,30 +49,31 @@ export class SoloServer {
     this.flush();
   }
 
-  openLobby(name, { map, pool } = {}) {
+  openLobby(name, { map, pool, loadout } = {}) {
     this.name = name || this.name;
     if (map && MAPS[map] && !MAPS[map].hidden) this.mapId = map;
+    if (loadout === 'drops' || loadout === 'full') this.loadout = loadout;
     if (pool !== undefined) this.pool = sanitizePool(pool, this.pool);
     this.mountRun({ lobby: true });
   }
 
   begin(map) {
-    if (!this.active) return;
     if (map && MAPS[map] && !MAPS[map].hidden) this.mapId = map;
     this.mountRun({ lobby: false });
   }
 
-  start(name, { map, pool } = {}) {
+  start(name, { map, pool, loadout } = {}) {
     this.name = name || this.name;
     if (map && MAPS[map] && !MAPS[map].hidden) this.mapId = map;
+    if (loadout === 'drops' || loadout === 'full') this.loadout = loadout;
     if (pool !== undefined) this.pool = sanitizePool(pool, this.pool);
     this.mountRun({ lobby: false });
   }
 
   setMap(map) {
-    if (!this.active || !MAPS[map] || MAPS[map].hidden || map === this.mapId) return;
+    if (!MAPS[map] || MAPS[map].hidden || map === this.mapId) return;
     this.mapId = map;
-    if (this.state === 'lobby') this.mountRun({ lobby: true });
+    if (this.active && this.state === 'lobby') this.mountRun({ lobby: true });
   }
 
   setPool(pool) {
@@ -76,8 +81,17 @@ export class SoloServer {
     if (next === this.pool) return;
     this.pool = next;
     if (this.active && this.state === 'lobby' && this.run) {
-      this.run.setPool(next);
-      this.client.setPool(next);
+      this.run.setPool(this.pool);
+      this.client.pool = this.pool;
+      this.flush();
+    }
+  }
+
+  setLoadout(loadout) {
+    if ((loadout !== 'drops' && loadout !== 'full') || loadout === this.loadout) return;
+    this.loadout = loadout;
+    if (this.active && this.state === 'lobby' && this.run) {
+      this.run.setLoadout(this.loadout);
       this.flush();
     }
   }
@@ -85,17 +99,15 @@ export class SoloServer {
   stop() {
     this.active = false;
     this.paused = false;
-    this.run = null;
-    this.queue = [];
   }
 
-  // Same interface as Net: the ClientGame sends its inputs here.
   send(msg) {
     if (!this.active || msg.t !== 'i') return;
-    for (const [s, b, a, w, v, k = 0] of msg.l) this.queue.push({ s, b, a, w, v, k });
+    for (const row of msg.l) {
+      this.queue.push({ s: row[0], b: row[1], a: row[2], w: row[3], v: row[4], k: row[5] | 0 });
+    }
   }
 
-  // One simulation tick, run right after ClientGame.tick() queued the player's input.
   step() {
     if (!this.active || this.paused) return;
     if (this.state === 'playing' && this.run.over && this.run.overSent) this.state = 'over';

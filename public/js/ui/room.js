@@ -131,6 +131,12 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     const goals = MODES[msg.mode].goals.map((g) => ({ id: g, name: String(g) }));
     const goalLabel = { duel: tr('pointsToWin'), ffa: tr('killsToWin'), teams: tr('teamKills') }[msg.mode];
     settingRow($('#w-goal'), goalLabel, goals, msg.goal, (goal) => net.send({ t: 'setopts', goal }), !host);
+    const loadouts = [
+      { id: 'drops', name: tr('riftDrops') },
+      { id: 'full', name: tr('fullArsenal') },
+    ];
+    settingRow($('#w-loadout'), tr('loadoutLabel'), loadouts, msg.loadout || 'drops', (loadout) =>
+      net.send({ t: 'setopts', loadout }), !host);
     poolPicker($('#w-pool'), pools(), msg.pool, (pool) => net.send({ t: 'setopts', pool }), !host);
 
     const start = $('#btn-start');

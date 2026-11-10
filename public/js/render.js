@@ -1,4 +1,4 @@
-import { GRID_H, GRID_W, MAT_DECOR, MAT_EMPTY, PHYS } from '/shared/constants.js';
+import { BUFF, BUFF_INFO, GRID_H, GRID_W, MAT_DECOR, MAT_EMPTY, PHYS } from '/shared/constants.js';
 import { PALETTE } from '/shared/maps.js';
 import { CHUNK } from '/shared/terrain.js';
 import { BOMBLET as BOMBLET_P, PROJ, VORTEX_P } from '/shared/projectiles.js';
@@ -467,6 +467,32 @@ export function drawStick(ctx, s) {
     }
     ctx.globalAlpha = 1;
   }
+  if (s.buff > 0 && s.buffT > 0) {
+    const info = BUFF_INFO[s.buff];
+    const bcol = info ? info.color : '#ffd23f';
+    ctx.globalAlpha = s.buffT < 1.5 ? 0.35 + 0.55 * Math.abs(Math.sin(s.time * 18)) : 0.85;
+    if (s.buff === BUFF.SHIELD && s.eshield > 0) {
+      const r = 20;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 - s.time * 2.6;
+        ctx.fillStyle = i % 3 === 0 ? '#ffd23f' : '#45d483';
+        ctx.fillRect(Math.round(X + Math.cos(a) * r * 0.65), Math.round(Y - 14 + Math.sin(a) * r), 1, 1);
+      }
+    } else if (s.buff === BUFF.TURBO) {
+      ctx.fillStyle = bcol;
+      for (let i = 0; i < 4; i++) {
+        const ox = -face * (3 + ((Math.floor(s.time * 24) + i * 2) % 7));
+        ctx.fillRect(Math.round(X + ox), Math.round(Y - 2 - (i % 2) * 3), 2, 1);
+      }
+    } else {
+      ctx.fillStyle = bcol;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + s.time * 4.5;
+        ctx.fillRect(Math.round(X + Math.cos(a) * 10), Math.round(Y - 15 + Math.sin(a) * 14), 1, 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
   return { head, neck, hip, feet, knees };
 }
 
@@ -649,11 +675,15 @@ export function drawProjectile(ctx, pr) {
 }
 
 const ITEM_SPRITES = [null, AMMO_BOX, PACK];
+const ORB_COLORS = ['#3ee6ff', '#ff4d9d', '#45d483', '#ffd23f'];
 
-// Pickup of `kind` (0 crate, 1 ammo box, 2 pack) whose bottom-centre is (x, y) in world px.
+// Pickup of `kind` (0 crate, 1 ammo box, 2 pack, 3 mystery crate, 4 Rift orb) at bottom-centre (x, y) world px.
 export function drawItem(ctx, kind, x, y, falling, t) {
   if (!kind) return drawCrate(ctx, x, y, falling, t);
+  if (kind === 3) return drawMysteryCrate(ctx, x, y, falling, t);
+  if (kind === 4) return drawRiftOrb(ctx, x, y, falling, t);
   const img = ITEM_SPRITES[kind];
+  if (!img) return;
   const X = Math.round(x / 2);
   const Y = Math.round(y / 2) - (falling ? 0 : Math.round(Math.max(0, Math.sin(t * 4)) * 1.5));
   if (falling && kind === 1) ctx.drawImage(CHUTE, X - 5, Y - img.height - 9);
@@ -662,6 +692,45 @@ export function drawItem(ctx, kind, x, y, falling, t) {
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillRect(X + (img.width >> 1), Y - img.height - 1, 1, 1);
   }
+}
+
+function drawMysteryCrate(ctx, x, y, falling, t) {
+  const X = Math.round(x / 2);
+  const Y = Math.round(y / 2);
+  if (falling) ctx.drawImage(CRATE_CHUTE, X - 8, Y - 12 - 8);
+  ctx.fillStyle = OUTLINE;
+  ctx.fillRect(X - 7, Y - 13, 14, 13);
+  ctx.fillStyle = '#22133d';
+  ctx.fillRect(X - 6, Y - 12, 12, 11);
+  const pulse = Math.floor(t * 5) % 2 === 0;
+  ctx.fillStyle = pulse ? '#ff4d9d' : '#3ee6ff';
+  ctx.fillRect(X - 6, Y - 12, 3, 2);
+  ctx.fillRect(X + 3, Y - 12, 3, 2);
+  ctx.fillRect(X - 6, Y - 3, 3, 2);
+  ctx.fillRect(X + 3, Y - 3, 3, 2);
+  drawText(ctx, '?', X, Y - 9, pulse ? '#ffd23f' : '#ffffff', 1);
+  if (!falling) {
+    ctx.fillStyle = pulse ? '#3ee6ff' : '#ff4d9d';
+    ctx.fillRect(X - 7, Y - 14, 1, 1);
+    ctx.fillRect(X + 6, Y - 14, 1, 1);
+  }
+}
+
+function drawRiftOrb(ctx, x, y, falling, t) {
+  const X = Math.round(x / 2);
+  const bob = falling ? 0 : Math.round(Math.sin(t * 5.5) * 2);
+  const Y = Math.round(y / 2) - 5 + bob;
+  const col = ORB_COLORS[Math.floor(t * 3.2) % ORB_COLORS.length];
+  ctx.fillStyle = OUTLINE;
+  pxCircle(ctx, X, Y, 5);
+  ctx.fillStyle = col;
+  pxCircle(ctx, X, Y, 3.6);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(X - 1, Y - 1, 2, 2);
+  const a = t * 5;
+  ctx.fillStyle = col;
+  ctx.fillRect(Math.round(X + Math.cos(a) * 6), Math.round(Y + Math.sin(a) * 4), 1, 1);
+  ctx.fillRect(Math.round(X - Math.cos(a) * 6), Math.round(Y - Math.sin(a) * 4), 1, 1);
 }
 
 // Crate position is the bottom-centre in world px.

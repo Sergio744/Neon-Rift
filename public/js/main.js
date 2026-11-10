@@ -320,6 +320,10 @@ function enterSurvival(m) {
 }
 
 const survivalMapItems = () => maps.map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+const loadoutItems = () => [
+  { id: 'drops', name: tr('riftDrops') },
+  { id: 'full', name: tr('fullArsenal') },
+];
 
 function setCoopFolded(on) {
   ui.coopWait.classList.toggle('folded', on);
@@ -343,11 +347,21 @@ function renderSoloLobby() {
     feel.reset();
     renderSoloLobby();
   });
+  settingRow($('#cw-loadout'), tr('loadoutLabel'), loadoutItems(), solo.loadout, (loadout) => {
+    solo.setLoadout(loadout);
+    hud.reset();
+    renderSoloLobby();
+  });
   poolPicker($('#cw-pool'), poolPresets, solo.pool, (pool) => {
     solo.setPool(pool);
     hud.reset();
     renderSoloLobby();
   });
+}
+
+function renderSurvivalLobby() {
+  if (mode === 'solo') renderSoloLobby();
+  else if (mode === 'coop' && coop) onCoop(coop);
 }
 
 function startSolo() {
@@ -511,6 +525,9 @@ function applyCoop(msg) {
     setText($('#cw-count'), `${msg.names.filter(Boolean).length}/${MAX_HUMANS}`);
     settingRow($('#cw-maps'), tr('mapLabel'), survivalMapItems(), msg.map || 'neon', (id) =>
       net.send({ t: 'setmap', map: id }),
+    );
+    settingRow($('#cw-loadout'), tr('loadoutLabel'), loadoutItems(), msg.loadout || 'drops', (loadout) =>
+      net.send({ t: 'setopts', loadout }),
     );
     poolPicker($('#cw-pool'), poolPresets, msg.pool, (pool) => net.send({ t: 'setopts', pool }));
     game.setPool(msg.pool);

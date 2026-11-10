@@ -1672,4 +1672,27 @@ input:focus {
   white-space: nowrap;
 }
 
+.buff-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 4);
+  padding: calc(var(--u) * 2) calc(var(--u) * 5);
+  margin-bottom: calc(var(--u) * 2);
+  background: rgba(10, 8, 24, 0.9);
+  border: calc(var(--u) * 1) solid var(--buff, #ffd23f);
+  color: var(--buff, #ffd23f);
+  font-size: calc(var(--u) * 5.5);
+  letter-spacing: calc(var(--u) * 0.5);
+  box-shadow: 0 0 calc(var(--u) * 6) rgba(255, 255, 255, 0.14);
+}
+
+.buff-pill span {
+  color: var(--ink);
+}
+
+#hotbar .slot .a.frenzy {
+  color: #ffd23f;
+}
+
+
 
