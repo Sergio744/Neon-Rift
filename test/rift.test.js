@@ -288,10 +288,10 @@ test('Solo, Co-op and Online rooms support all maps, default to Rift Drops with 
     await wait((m) => m.t === 'coop' && m.map === 'canyon');
     await wait((m) => m.t === 'map' && m.id === 'canyon');
 
-    msgs.length = 0;
     ws.send(JSON.stringify({ t: 'start' }));
     await wait((m) => m.t === 'coop' && m.st === 'playing' && m.map === 'canyon');
-    const snap = await wait((m) => m.t === 's' && m.p[0]);
+    msgs.length = 0;
+    const snap = await wait((m) => m.t === 's' && m.p[0] && m.sv?.st !== 'lobby');
     const p0 = unpackPlayer(snap.p[0], createPlayer(0));
     assert.equal(p0.owned, poolStart(FULL_POOL), 'Rift Drops starts with light loadout');
     assert.ok(p0.ammo[W.smg] > 0, 'Rift Drops uses finite ammo on non-pistol weapons');
