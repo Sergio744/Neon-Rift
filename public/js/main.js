@@ -1,4 +1,5 @@
 import { CREW_COLORS, INTERP_TICKS, PLAYER_COLORS, TICK_MS } from '/shared/constants.js';
+import { MAPS, MAP_IDS, mapSize } from '/shared/maps.js';
 import { TEAM_NAMES } from '/shared/modes.js';
 import { ENEMIES, MAX_HUMANS, SURVIVAL_SLOTS } from '/shared/survival.js';
 import { POOLS, POOL_IDS } from '/shared/weapons.js';
@@ -9,10 +10,10 @@ import { applyDomI18n, onLangChange, toggleLang, tr } from './i18n.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { SoloServer } from './solo.js';
-import { poolPicker } from './ui/controls.js';
+import { chips, poolPicker, settingRow } from './ui/controls.js';
 import { createFeel } from './ui/feel.js';
 import { createHud } from './ui/hud.js';
-import { createRoomUi, isGroup, ranking, slotColor } from './ui/room.js';
+import { createRoomUi, isGroup, ranking, sizeTag, slotColor } from './ui/room.js';
 
 const $ = (sel) => document.querySelector(sel);
 const canvas = $('#view');
@@ -53,13 +54,14 @@ const ui = {
   matchAlert: $('#match-alert'),
 };
 
-let maps = [];
+let maps = MAP_IDS.map((id) => ({ id, name: MAPS[id].name, w: mapSize(id).w, h: mapSize(id).h }));
 // Weapon picker data (from the server hello, with local defaults so the menu renders offline).
 let poolPresets = POOL_IDS.map((id) => ({ id, name: POOLS[id].name, mask: POOLS[id].mask }));
 // 'menu' | 'room' (online duel or group room, see room.mode) | 'solo' (local waves) | 'coop' (online waves)
 let mode = 'menu';
 let coop = null; // last co-op room info
 let sv = null; // last survival state, solo or co-op
+let survNextMap = 'neon';
 let crewNames = [];
 let room = null;
 let parkedRoom = null; // { code, mode } while a private room waits in the background
@@ -232,7 +234,15 @@ $('#btn-coop').addEventListener('click', () => {
   renderParkedBar();
   net.send({ t: 'coop', name: playerName() });
 });
-$('#btn-coop-start').addEventListener('click', () => net.send({ t: 'start' }));
+$('#btn-coop-start').addEventListener('click', () => {
+  sfx.unlock();
+  if (mode === 'solo') beginSoloWaves();
+  else net.send({ t: 'start' });
+});
+$('#btn-cw-fold').addEventListener('click', () => {
+  const folded = !ui.coopWait.classList.contains('folded');
+  setCoopFolded(folded);
+});
 $('#btn-copy3').addEventListener('click', copyInvite);
 $('#btn-pb-copy').addEventListener('click', copyInvite);
 $('#btn-pb-return').addEventListener('click', () => {
@@ -309,15 +319,60 @@ function enterSurvival(m) {
   center('', '', false);
 }
 
+const survivalMapItems = () => maps.map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+
+function setCoopFolded(on) {
+  ui.coopWait.classList.toggle('folded', on);
+  const fold = $('#btn-cw-fold');
+  if (fold) {
+    fold.textContent = on ? tr('show') : tr('hide');
+    fold.setAttribute('aria-expanded', String(!on));
+  }
+}
+
+function renderSoloLobby() {
+  show(ui.coopWait, true);
+  $('#cw-title').textContent = tr('soloTitle');
+  show($('#cw-count'), false);
+  show($('#cw-code-row'), false);
+  show($('#cw-players'), false);
+  $('#cw-hint').textContent = tr('soloHint');
+  settingRow($('#cw-maps'), tr('mapLabel'), survivalMapItems(), solo.mapId, (id) => {
+    solo.setMap(id);
+    hud.reset();
+    feel.reset();
+    renderSoloLobby();
+  });
+  poolPicker($('#cw-pool'), poolPresets, solo.pool, (pool) => {
+    solo.setPool(pool);
+    hud.reset();
+    renderSoloLobby();
+  });
+}
+
 function startSolo() {
   sfx.unlock();
   enterSurvival('solo');
+  setCoopFolded(false);
   renderParkedBar();
   crewNames = [playerName()];
   game.net = solo;
-  solo.start(playerName());
+  solo.openLobby(playerName());
   ui.netinfo.textContent = 'SOLO';
-  flash('GET READY', 'DEFEND THE OUTPOST', 1300);
+  renderSoloLobby();
+}
+
+function beginSoloWaves(nextMap) {
+  show(ui.coopWait, false);
+  show(ui.soloOver, false);
+  show(ui.pause, false);
+  solo.begin(nextMap);
+  hud.reset();
+  feel.reset();
+  helpOnStart();
+  input.enabled = true;
+  input.releaseAll();
+  flash(tr('getReady'), game.mapName || '', 1300);
 }
 
 function exitSolo() {
@@ -391,6 +446,14 @@ function soloClear(n, bonus) {
   flash('WAVE CLEAR', `+${bonus} BONUS - HP AND AMMO RESTORED`, 2200);
 }
 
+function renderSurvivalOverMaps() {
+  chips($('#so-maps'), survivalMapItems(), survNextMap, (id) => {
+    survNextMap = id;
+    if (mode === 'coop') net.send({ t: 'setmap', map: id });
+    renderSurvivalOverMaps();
+  });
+}
+
 function soloOver(stats) {
   const best = loadBest();
   const isNew = mode === 'solo' && stats.score > best;
@@ -401,6 +464,8 @@ function soloOver(stats) {
       /* storage blocked */
     }
   }
+  survNextMap = mode === 'coop' ? (coop?.map || 'neon') : solo.mapId;
+  renderSurvivalOverMaps();
   $('#so-wave').textContent = stats.wave;
   $('#so-kills').textContent = stats.kills;
   $('#so-score').textContent = stats.score;
@@ -416,13 +481,23 @@ function soloOver(stats) {
 
 // ---------- co-op ----------
 
+let lastCoopCode = null;
 function applyCoop(msg) {
   const prev = coop;
   coop = msg;
   crewNames = msg.names.map((n) => n || '');
   const lobby = msg.st === 'lobby';
+  if (lobby && msg.code !== lastCoopCode) {
+    lastCoopCode = msg.code;
+    setCoopFolded(false);
+  }
   show(ui.coopWait, lobby);
   if (lobby) {
+    $('#cw-title').textContent = tr('coopTitle');
+    show($('#cw-count'), true);
+    show($('#cw-code-row'), true);
+    show($('#cw-players'), true);
+    $('#cw-hint').textContent = tr('shareCoop');
     $('#cw-code').textContent = msg.code;
     const list = $('#cw-players');
     list.textContent = '';
@@ -434,8 +509,15 @@ function applyCoop(msg) {
       list.appendChild(row);
     });
     setText($('#cw-count'), `${msg.names.filter(Boolean).length}/${MAX_HUMANS}`);
+    settingRow($('#cw-maps'), tr('mapLabel'), survivalMapItems(), msg.map || 'neon', (id) =>
+      net.send({ t: 'setmap', map: id }),
+    );
     poolPicker($('#cw-pool'), poolPresets, msg.pool, (pool) => net.send({ t: 'setopts', pool }));
     game.setPool(msg.pool);
+  }
+  if (msg.st === 'over' && !ui.soloOver.classList.contains('hidden') && msg.map) {
+    survNextMap = msg.map;
+    renderSurvivalOverMaps();
   }
   if (msg.st === 'playing' && prev && prev.st !== 'playing') {
     show(ui.soloOver, false);
@@ -445,13 +527,15 @@ function applyCoop(msg) {
     helpOnStart();
     input.enabled = true;
     input.releaseAll();
-    flash('GET READY', 'DEFEND THE OUTPOST TOGETHER', 1300);
+    flash(tr('getReady'), game.mapName || '', 1300);
   }
 }
 
 if (new URLSearchParams(location.search).has('debug')) window.sd = { game, solo };
 $('#btn-solo').addEventListener('click', startSolo);
-$('#btn-retry').addEventListener('click', () => (mode === 'coop' ? net.send({ t: 'start' }) : startSolo()));
+$('#btn-retry').addEventListener('click', () =>
+  mode === 'coop' ? net.send({ t: 'start', map: survNextMap }) : beginSoloWaves(survNextMap),
+);
 $('#btn-solo-menu').addEventListener('click', leave);
 renderBest();
 
@@ -860,6 +944,8 @@ $('#btn-lang')?.addEventListener('click', toggleLang);
 onLangChange(() => {
   ui.conn.textContent = net.open ? tr('connected') : tr('connecting');
   renderBest();
+  if (!ui.coopWait.classList.contains('hidden')) renderSurvivalLobby();
+  if (!ui.soloOver.classList.contains('hidden')) renderSurvivalOverMaps();
 });
 applyDomI18n();
 

@@ -279,7 +279,8 @@ body {
   letter-spacing: calc(var(--u) * 2);
 }
 
-#waiting {
+#waiting,
+#coop-wait {
   top: calc(var(--u) * 34);
   gap: calc(var(--u) * 5);
   max-width: calc(var(--u) * 420);
@@ -287,23 +288,28 @@ body {
   overflow-y: auto;
 }
 
-#waiting .w-head {
+#waiting .w-head,
+#coop-wait .w-head {
   display: flex;
   align-items: baseline;
   gap: calc(var(--u) * 6);
+  width: 100%;
 }
 
-#waiting .w-title {
+#waiting .w-title,
+#coop-wait .w-title {
   font-size: calc(var(--u) * 10);
   font-weight: 700;
 }
 
-#waiting .w-count {
+#waiting .w-count,
+#coop-wait .w-count {
   color: var(--accent);
   font-size: calc(var(--u) * 7);
 }
 
-#waiting .w-fold {
+#waiting .w-fold,
+#coop-wait .w-fold {
   margin-left: auto;
   align-self: center;
   font-size: calc(var(--u) * 5);
@@ -311,19 +317,24 @@ body {
 }
 
 /* Folded: only the title, the code and the start button stay over the warm-up. */
-#waiting.folded {
+#waiting.folded,
+#coop-wait.folded {
   top: calc(var(--u) * 30);
   padding: calc(var(--u) * 4) calc(var(--u) * 8);
   gap: calc(var(--u) * 3);
 }
 
 #waiting.folded .w-players,
+#coop-wait.folded .players,
 #waiting.folded .w-settings,
-#waiting.folded .w-hint {
+#coop-wait.folded .w-settings,
+#waiting.folded .w-hint,
+#coop-wait.folded .w-hint {
   display: none;
 }
 
-#waiting .w-code {
+#waiting .w-code,
+#coop-wait .w-code {
   display: flex;
   align-items: center;
   gap: calc(var(--u) * 8);

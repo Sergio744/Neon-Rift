@@ -80,15 +80,22 @@
         <div id="board" class="hidden"></div>
 
         <div id="coop-wait" class="waitbox hidden">
-          <div class="w-title"><span data-i18n="coopTitle">CO-OP SURVIVAL</span> <b id="cw-count">1/4</b></div>
-          <div class="w-code"><span data-i18n="roomLabel">ROOM</span> <b id="cw-code">----</b></div>
-          <div class="w-row players" id="cw-players"></div>
-          <div class="w-settings"><div id="cw-pool"></div></div>
-          <div class="w-row">
-            <button class="btn small" id="btn-copy3" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
-            <button class="btn small primary" id="btn-coop-start" type="button" data-i18n="startWaves">START THE WAVES</button>
+          <div class="w-head">
+            <div class="w-title" id="cw-title">CO-OP SURVIVAL</div>
+            <b class="w-count" id="cw-count">1/4</b>
+            <button class="btn small w-fold" id="btn-cw-fold" type="button" aria-expanded="true">HIDE</button>
           </div>
-          <div class="w-hint" data-i18n="shareCoop">SHARE THE LINK WITH UP TO 3 FRIENDS</div>
+          <div class="w-code" id="cw-code-row">
+            <span><span data-i18n="roomLabel">ROOM</span> <b id="cw-code">----</b></span>
+            <button class="btn small" id="btn-copy3" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
+          </div>
+          <div class="w-row players" id="cw-players"></div>
+          <div class="w-settings">
+            <div id="cw-maps"></div>
+            <div id="cw-pool"></div>
+          </div>
+          <button class="btn small primary" id="btn-coop-start" type="button" data-i18n="startWaves">START THE WAVES</button>
+          <div class="w-hint" id="cw-hint">SHARE THE LINK WITH UP TO 3 FRIENDS</div>
         </div>
 
         <div id="buildbar" class="hidden">
@@ -217,6 +224,8 @@
             <div id="so-best-row"><span data-i18n="best">BEST</span><b id="so-best">0</b></div>
           </div>
           <div class="center new-best hidden" id="so-new" data-i18n="newBest">NEW BEST!</div>
+          <div class="section-title" data-i18n="nextMap">NEXT MAP</div>
+          <div class="chips" id="so-maps"></div>
           <button class="btn primary wide" id="btn-retry" type="button" data-i18n="tryAgain">TRY AGAIN</button>
           <button class="btn wide danger" id="btn-solo-menu" type="button" data-i18n="menu">MENU</button>
         </div>

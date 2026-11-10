@@ -150,14 +150,14 @@ export class Lobby {
       case 'coop': {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
-        this.createRoom({ coop: true, pool: msg.pool }).join(client);
+        this.createRoom({ coop: true, pool: msg.pool, map: msg.map }).join(client);
         break;
       }
       case 'start':
-        if (client.room) client.room.begin(client);
+        if (client.room) client.room.begin(client, msg.map);
         break;
       case 'setopts':
-        if (client.room) client.room.setOpts?.(client, { pool: msg.pool, goal: msg.goal, mode: msg.mode });
+        if (client.room) client.room.setOpts?.(client, { pool: msg.pool, goal: msg.goal, mode: msg.mode, map: msg.map });
         break;
       case 'team':
         if (client.room instanceof Room) client.room.setTeam(client, msg.team);
@@ -200,7 +200,7 @@ export class Lobby {
         if (client.room instanceof Room) client.room.requestRematch(client, msg.map);
         break;
       case 'setmap':
-        if (client.room instanceof Room) client.room.setMap(client, String(msg.map ?? ''));
+        if (client.room) client.room.setMap?.(client, String(msg.map ?? ''));
         break;
       case 'leave':
         this.leaveRoom(client);

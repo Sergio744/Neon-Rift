@@ -1,6 +1,7 @@
 import { DT } from './constants.js';
 import { Game } from './game.js';
-import { mulberry32 } from './rng.js';
+import { MAPS } from './maps.js';
+import { mulberry32, randomSeed } from './rng.js';
 import { brain } from './survival-bots.js';
 import { ALL_OWNED, FULL_POOL, GRENADE, fullAmmo, poolStart, sanitizePool } from './weapons.js';
 
@@ -74,21 +75,25 @@ function roster(n, crew, rng) {
 }
 
 export class Survival {
-  // `lobby`: players warm up (auto respawn, no waves) until `begin()`.
-  // `pool`: allowed weapons; humans start with its first 4 and each cleared wave unlocks the next.
-  constructor(seed, { lobby = false, pool = FULL_POOL } = {}) {
+  // `lobby`: players warm up (auto respawn, infinite warm-up ammo, no waves) until `begin()`.
+  // `map`: any playable map in MAPS.
+  // `unlockAll`: when true, humans own the entire `pool` from second 1 (matching online modes).
+  constructor(seed, { lobby = false, pool = FULL_POOL, map = SURVIVAL_MAP, unlockAll = false } = {}) {
+    this.mapId = MAPS[map] && !MAPS[map].hidden ? map : SURVIVAL_MAP;
+    this.unlockAll = Boolean(unlockAll);
     this.pool = sanitizePool(pool);
     this.reset(seed, lobby);
   }
 
   reset(seed, lobby = false) {
-    const g = new Game(SURVIVAL_MAP, seed, SURVIVAL_SLOTS);
+    const g = new Game(this.mapId, seed, SURVIVAL_SLOTS);
     g.team = g.team.map((_, s) => (isHuman(s) ? 0 : 1));
     g.autoRespawn = lobby;
+    g.infiniteAmmo = lobby;
     g.cratesOn = !lobby;
     g.canLoot = g.canLoot.map((_, s) => isHuman(s));
     g.pool = this.pool;
-    g.startOwned = poolStart(this.pool);
+    g.startOwned = this.unlockAll ? this.pool : poolStart(this.pool);
     g.baseOwned = g.startOwned;
     g.onKill = (v, by) => this.onKill(v, by);
     this.game = g;
@@ -138,18 +143,31 @@ export class Survival {
     return Math.max(1, this.humans().length);
   }
 
-  // New weapon pool (lobby warm-up): everyone restarts from the pool's starting arsenal.
+  // New weapon pool (lobby warm-up): everyone gets the updated starting arsenal.
   setPool(pool) {
     const g = this.game;
     this.pool = sanitizePool(pool, this.pool);
     g.pool = this.pool;
-    g.startOwned = poolStart(this.pool);
+    g.startOwned = this.unlockAll ? this.pool : poolStart(this.pool);
     g.baseOwned = g.startOwned;
     for (const s of this.humans()) {
       const p = g.players[s];
       p.owned = g.baseOwned;
+      if (this.lobby) p.ammo.fill(-1);
+      else p.ammo = fullAmmo();
       if (!(p.owned & (1 << p.w))) p.w = 0;
     }
+  }
+
+  // Switches the warm-up map while keeping all connected humans in place.
+  setMap(map) {
+    if (!MAPS[map] || MAPS[map].hidden) return false;
+    this.mapId = map;
+    const hs = this.humans();
+    this.reset(randomSeed(), this.lobby);
+    for (const s of hs) this.addHuman(s);
+    this.game.takeEvents();
+    return true;
   }
 
   // A newcomer gets the crew's arsenal; mid-run it also brings one life.
@@ -245,12 +263,16 @@ export class Survival {
     h.lastHp = p.hp;
   }
 
-  // Each human gets its own spot on the fort roof so the crew never spawns stacked.
+  // Each human gets its own spot on the central platform/roof so the crew never spawns stacked.
   place(s) {
     const g = this.game;
-    const [sx, sy] = g.spawns[HUMAN_SPAWN];
-    const x = sx + (s - (MAX_HUMANS - 1) / 2) * 26;
-    g.spawnAt(s, x, g.terrain.findStand(x, sy));
+    const idx = Math.min(HUMAN_SPAWN, g.spawns.length - 1);
+    const [sx, sy] = g.spawns[idx];
+    const baseY = g.terrain.findStand(sx, sy);
+    const candX = Math.max(40, Math.min(g.worldW - 40, sx + (s - (MAX_HUMANS - 1) / 2) * 24));
+    const candY = g.terrain.findStand(candX, sy);
+    const useCand = Math.abs(candY - baseY) <= 36;
+    g.spawnAt(s, useCand ? candX : sx, useCand ? candY : baseY);
   }
 
   revive(s) {
@@ -358,8 +380,11 @@ export class Survival {
     const pts = g.spawns.map(([x, y], i) => ({ i, x, y: g.terrain.findStand(x, y) }));
     const fresh = (q) => this.time - (this.spawnUse[q.i] ?? -99) > 2;
     const away = (q, d) => hs.every((p) => Math.hypot(q.x - p.x, q.y - p.y) > d);
-    let pick = pts.filter((q) => fresh(q) && away(q, 700));
-    if (!pick.length) pick = pts.filter((q) => away(q, 450));
+    const farD = Math.min(700, g.worldW * 0.36);
+    const midD = Math.min(450, g.worldW * 0.22);
+    let pick = pts.filter((q) => fresh(q) && away(q, farD));
+    if (!pick.length) pick = pts.filter((q) => fresh(q) && away(q, midD));
+    if (!pick.length) pick = pts.filter((q) => away(q, midD));
     if (!pick.length) pick = pts;
     const sp = pick[Math.floor(this.rng() * pick.length)];
     this.spawnUse[sp.i] = this.time;

@@ -5,8 +5,10 @@ import { BTN, MAT_BEDROCK, PHYS } from '../shared/constants.js';
 import { Game } from '../shared/game.js';
 import { prismTrace } from '../shared/geom.js';
 import { MAP_IDS, buildMap } from '../shared/maps.js';
+import { createPlayer, unpackPlayer } from '../shared/player.js';
 import { PROJ, VORTEX_P } from '../shared/projectiles.js';
-import { PRISM, RIFT_POOL, W, WEAPONS, owns, sanitizePool } from '../shared/weapons.js';
+import { Survival } from '../shared/survival.js';
+import { FULL_POOL, PRISM, RIFT_POOL, W, WEAPONS, owns, sanitizePool } from '../shared/weapons.js';
 import { startServer } from '../server/index.js';
 import { Room } from '../server/room.js';
 
@@ -234,6 +236,64 @@ test('private duel creator can park room in background and auto-wakes when oppon
 
     host.ws.close();
     rival.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Solo and Co-op give immediate access to all online maps and full weapon pools', async () => {
+  // 1. Solo / Survival runs on every online map with the entire weapon pool owned immediately.
+  for (const id of MAP_IDS) {
+    const run = new Survival(777, { map: id, pool: FULL_POOL, unlockAll: true });
+    run.addHuman(0);
+    assert.equal(run.game.mapId, id);
+    assert.equal(run.game.players[0].owned, FULL_POOL, `all weapons owned on ${id}`);
+    assert.ok(owns(run.game.players[0].owned, W.blink));
+    assert.ok(owns(run.game.players[0].owned, W.prism));
+    assert.ok(owns(run.game.players[0].owned, W.vortex));
+    for (let i = 0; i < 200; i++) run.step();
+    assert.equal(run.wave, 1, `wave 1 starts cleanly on ${id}`);
+  }
+
+  // 2. Co-op over WebSocket lets players pick any online map and owns all pool weapons immediately.
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+  const msgs = [];
+  let waiters = [];
+  ws.on('message', (d) => {
+    const m = JSON.parse(d.toString());
+    msgs.push(m);
+    waiters = waiters.filter((w) => !w(m));
+  });
+  const wait = (pred, ms = 5000) =>
+    new Promise((res, rej) => {
+      const found = msgs.find(pred);
+      if (found) return res(found);
+      const to = setTimeout(() => rej(new Error('timeout')), ms);
+      waiters.push((m) => {
+        if (!pred(m)) return false;
+        clearTimeout(to);
+        res(m);
+        return true;
+      });
+    });
+
+  try {
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ t: 'coop', name: 'sergio' }));
+    await wait((m) => m.t === 'coop' && m.map === 'neon' && m.pool === FULL_POOL);
+
+    ws.send(JSON.stringify({ t: 'setmap', map: 'canyon' }));
+    await wait((m) => m.t === 'coop' && m.map === 'canyon');
+    await wait((m) => m.t === 'map' && m.id === 'canyon');
+
+    msgs.length = 0;
+    ws.send(JSON.stringify({ t: 'start' }));
+    await wait((m) => m.t === 'coop' && m.st === 'playing' && m.map === 'canyon');
+    const snap = await wait((m) => m.t === 's' && m.p[0]);
+    const p0 = unpackPlayer(snap.p[0], createPlayer(0));
+    assert.equal(p0.owned, FULL_POOL, 'Co-op player owns all online weapons immediately');
+    ws.close();
   } finally {
     await srv.close();
   }
