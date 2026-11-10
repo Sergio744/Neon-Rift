@@ -1585,3 +1585,10 @@ input:focus {
 #buildbar .dim {
   color: rgba(255, 255, 255, 0.55);
 }
+
+.btn.copied {
+  border-color: var(--ok);
+  color: var(--ok);
+  background: rgba(69, 212, 131, 0.16);
+}
+

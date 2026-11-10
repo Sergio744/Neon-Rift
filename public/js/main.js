@@ -103,15 +103,47 @@ function inviteLink(code) {
   return `${location.origin}/?room=${code}`;
 }
 
-async function copyInvite() {
+const copyTimers = new WeakMap();
+
+function copyText(text) {
+  let ok = false;
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus({ preventScroll: true });
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    ok = document.execCommand('copy');
+    ta.remove();
+  } catch {
+    /* fallback failed */
+  }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+  return ok;
+}
+
+function copyInvite(e) {
   const code = room?.code ?? coop?.code;
   if (!code) return;
-  const link = inviteLink(code);
-  try {
-    await navigator.clipboard.writeText(link);
-    toast(tr('inviteCopied'));
-  } catch {
-    toast(link);
+  copyText(inviteLink(code));
+  sfx.play('switch');
+  const btn = e?.currentTarget;
+  if (btn instanceof HTMLElement) {
+    clearTimeout(copyTimers.get(btn));
+    btn.classList.add('copied');
+    btn.textContent = `✓ ${tr('inviteCopied')}`;
+    copyTimers.set(
+      btn,
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.textContent = tr('copyInvite');
+      }, 1500),
+    );
   }
 }
 
