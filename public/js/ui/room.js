@@ -69,21 +69,52 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
   fold.addEventListener('click', () => setFolded(!$('#waiting').classList.contains('folded')));
   const mapItems = () => maps().map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
 
-  function playerTag(msg, s) {
-    const row = el('span', 'pl');
+  function playerTag(msg, s, allowManage = false) {
+    const isBot = Boolean(msg.bots?.[s]);
+    const row = el('span', `pl${isBot ? ' bot' : ''}`);
     row.style.setProperty('--c', slotColor(msg, s));
     row.append(el('i'), el('span', 'nm', name(msg, s)));
-    if (s === game.slot) row.append(el('small', 'you', 'YOU'));
+    if (isBot) row.append(el('small', 'ai-tag', 'AI'));
+    if (s === game.slot) row.append(el('small', 'you', tr('youShort')));
     if (isGroup(msg) && s === msg.host) row.append(el('small', 'host', 'HOST'));
+    if (allowManage && isBot) {
+      if (msg.mode === 'teams') {
+        const swap = el('button', 'pl-act', '⇄');
+        swap.type = 'button';
+        swap.title = 'Switch team';
+        swap.addEventListener('click', (e) => {
+          e.stopPropagation();
+          net.send({ t: 'team', team: 1 - msg.teams[s], slot: s });
+        });
+        row.appendChild(swap);
+      }
+      const rm = el('button', 'pl-act rm', '×');
+      rm.type = 'button';
+      rm.title = 'Remove bot';
+      rm.addEventListener('click', (e) => {
+        e.stopPropagation();
+        net.send({ t: 'rmbot', slot: s });
+      });
+      row.appendChild(rm);
+    }
     return row;
   }
 
-  function renderPlayers(msg) {
+  function renderPlayers(msg, host) {
     const box = $('#w-players');
     box.textContent = '';
     box.classList.toggle('teams', msg.mode === 'teams');
+    const total = msg.names.filter(Boolean).length;
+    const canAddBot = host && !msg.pub && total < msg.max;
+
     if (msg.mode !== 'teams') {
-      msg.names.forEach((n, s) => n && box.appendChild(playerTag(msg, s)));
+      msg.names.forEach((n, s) => n && box.appendChild(playerTag(msg, s, host)));
+      if (canAddBot) {
+        const add = el('button', 'btn small bot-add', tr('addBot'));
+        add.type = 'button';
+        add.addEventListener('click', () => net.send({ t: 'addbot' }));
+        box.appendChild(add);
+      }
       return;
     }
     for (const t of [0, 1]) {
@@ -92,20 +123,28 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
       const members = msg.names.map((n, s) => (n && msg.teams[s] === t ? s : -1)).filter((s) => s >= 0);
       const head = el('div', 'team-head');
       head.append(el('b', '', TEAM_NAMES[t]), el('span', 'dim', String(members.length)));
+      const actions = el('div', 'team-actions');
       if (msg.teams[game.slot] !== t) {
-        const join = el('button', 'btn small', 'JOIN');
+        const join = el('button', 'btn small', tr('joinTeam'));
         join.type = 'button';
         join.addEventListener('click', () => net.send({ t: 'team', team: t }));
-        head.appendChild(join);
+        actions.appendChild(join);
       }
+      if (canAddBot) {
+        const addBot = el('button', 'btn small bot-add', tr('addBot'));
+        addBot.type = 'button';
+        addBot.addEventListener('click', () => net.send({ t: 'addbot', team: t }));
+        actions.appendChild(addBot);
+      }
+      head.appendChild(actions);
       col.appendChild(head);
-      for (const s of members) col.appendChild(playerTag(msg, s));
-      if (!members.length) col.appendChild(el('span', 'dim empty', 'NOBODY YET'));
+      for (const s of members) col.appendChild(playerTag(msg, s, host));
+      if (!members.length) col.appendChild(el('span', 'dim empty', tr('nobodyYet')));
       box.appendChild(col);
     }
   }
 
-  // Duel: waiting for the opponent (both can change the map and weapons).
+  // Duel: waiting for the opponent (both can change the map and weapons, or upgrade to Squads / spar a Bot).
   // Group: lobby with the player list; only the host edits the settings and starts.
   function waiting(msg) {
     if (msg.code !== foldedCode) setFolded(false);
@@ -119,13 +158,34 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     setText($('#w-count'), group ? `${n}/${msg.max} ${tr('players')}` : '');
     setText($('#w-code'), msg.code);
     $('#w-players').classList.toggle('hidden', !group);
-    if (group) renderPlayers(msg);
+    if (group) renderPlayers(msg, host);
+
+    const duelSquadRow = $('#w-squad-actions');
+    if (duelSquadRow) {
+      const showDuelUpgrade = !group && !msg.pub && host;
+      duelSquadRow.classList.toggle('hidden', !showDuelUpgrade);
+    }
 
     const modeRow = $('#w-mode');
     modeRow.classList.toggle('hidden', !group);
     if (group) {
       const items = GROUP_MODES.map((id) => ({ id, name: MODES[id].name }));
       settingRow(modeRow, tr('modeLabel'), items, msg.mode, (mode) => net.send({ t: 'setopts', mode }), !host);
+    }
+    const botSkillRow = $('#w-botskill');
+    if (botSkillRow) {
+      const hasBots = Boolean(msg.bots?.some(Boolean));
+      const showSkill = !msg.pub && (group || hasBots);
+      botSkillRow.classList.toggle('hidden', !showSkill);
+      if (showSkill) {
+        const skills = [
+          { id: 'rookie', name: tr('skillRookie') },
+          { id: 'veteran', name: tr('skillVeteran') },
+          { id: 'ace', name: tr('skillAce') },
+        ];
+        settingRow(botSkillRow, tr('botSkillLabel'), skills, msg.botSkill || 'veteran', (skill) =>
+          net.send({ t: 'botskill', skill }), !host);
+      }
     }
     settingRow($('#w-maps'), tr('mapLabel'), mapItems(), msg.map, (id) => net.send({ t: 'setmap', map: id }), !host);
     const goals = MODES[msg.mode].goals.map((g) => ({ id: g, name: String(g) }));

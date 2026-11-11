@@ -1,4 +1,5 @@
 import { BUFF, BUFF_INFO, GRID_H, GRID_W, MAT_DECOR, MAT_EMPTY, PHYS } from '/shared/constants.js';
+import { measureText } from '/shared/font.js';
 import { PALETTE } from '/shared/maps.js';
 import { CHUNK } from '/shared/terrain.js';
 import { BOMBLET as BOMBLET_P, PROJ, VORTEX_P } from '/shared/projectiles.js';
@@ -533,6 +534,40 @@ export function drawNameTag(ctx, x, y, name, color, hp, showHp) {
     ctx.fillStyle = hp > 50 ? '#45d483' : hp > 25 ? '#ffd23f' : '#ff3b3b';
     ctx.fillRect(X - w / 2, Y - 34, Math.max(0, Math.round((w * hp) / 100)), 2);
   }
+}
+
+export function drawSpeechBubble(ctx, x, y, rawText, color, alpha = 1) {
+  const clean = String(rawText || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ., :;!?'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return;
+  const txt = clean.length > 26 ? `${clean.slice(0, 24)}..` : clean;
+  const tw = measureText(txt, 1);
+  const padX = 4;
+  const bw = tw + padX * 2;
+  const bh = 11;
+  const X = Math.round(x / 2);
+  const Y = Math.round(y / 2) - 58;
+  const bx = Math.round(X - bw / 2);
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.fillStyle = 'rgba(10, 8, 24, 0.9)';
+  ctx.fillRect(bx, Y, bw, bh);
+  ctx.fillStyle = color || '#3ee6ff';
+  ctx.fillRect(bx - 1, Y, 1, bh);
+  ctx.fillRect(bx + bw, Y, 1, bh);
+  ctx.fillRect(bx, Y - 1, bw, 1);
+  ctx.fillRect(bx, Y + bh, bw, 1);
+  // Pointer tail
+  ctx.fillRect(X - 1, Y + bh + 1, 3, 1);
+  ctx.fillRect(X, Y + bh + 2, 1, 1);
+  drawText(ctx, txt, X, Y + 2, '#f4f1ff', 1);
+  ctx.restore();
 }
 
 // Arrow at the top edge when a player flies above the screen.

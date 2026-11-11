@@ -11,7 +11,7 @@ import { shots } from './client/shots.js';
 import { TerrainSync } from './client/terrain-sync.js';
 import './fx-tools.js';
 import {
-  TerrainView, drawCrosshair, drawItem, drawNameTag, drawOffscreen, drawProjectile, drawStick, makeSky,
+  TerrainView, drawCrosshair, drawItem, drawNameTag, drawOffscreen, drawProjectile, drawSpeechBubble, drawStick, makeSky,
 } from './render.js';
 
 const MAX_SNAPS = 40;
@@ -344,6 +344,12 @@ export class ClientGame {
     for (const s of others) {
       const r = this.remotes[s];
       drawNameTag(ctx, r.x, r.y, this.names[s] || `P${s + 1}`, this.color(s), r.hp, true);
+      const bub = this.bubbleFor?.(s);
+      if (bub) drawSpeechBubble(ctx, r.x, r.y, bub.text, this.color(s), bub.alpha);
+    }
+    if (meOn) {
+      const myBub = this.bubbleFor?.(this.slot);
+      if (myBub) drawSpeechBubble(ctx, mx, my, myBub.text, this.color(this.slot), myBub.alpha);
     }
     ctx.restore();
 

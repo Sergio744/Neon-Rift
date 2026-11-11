@@ -33,6 +33,39 @@
             <i class="hb-menu" aria-hidden="true"></i>
             <span data-i18n="hudMenu">MAIN MENU</span>
           </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-chat" type="button" title="ENTER">
+            <span data-i18n="hudChat">CHAT</span>
+            <i id="chat-unread" class="unread-dot hidden"></i>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-mic" type="button">
+            <i class="hb-dot" aria-hidden="true"></i>
+            <span data-i18n="hudMic">MIC</span>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-cam" type="button">
+            <i class="hb-dot" aria-hidden="true"></i>
+            <span data-i18n="hudCam">CAM</span>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-vscope" type="button" data-i18n="voiceAll">VOICE: ALL</button>
+        </div>
+        <div id="holo-cams" class="hidden"></div>
+        <div id="chat-panel" class="hidden">
+          <div id="squad-orders" class="squad-orders hidden">
+            <span class="dim"><kbd>G</kbd></span>
+            <button type="button" class="chip-mini" data-order="follow" data-i18n="orderFollow">FOLLOW ME</button>
+            <button type="button" class="chip-mini" data-order="attack" data-i18n="orderAttack">ATTACK</button>
+            <button type="button" class="chip-mini" data-order="hold" data-i18n="orderHold">HOLD ZONE</button>
+          </div>
+          <div id="chat-log"></div>
+          <div id="chat-quick" class="chat-quick hidden">
+            <button type="button" class="chip-mini" data-quick="gg" data-i18n="quickGg">GG!</button>
+            <button type="button" class="chip-mini" data-quick="nice" data-i18n="quickNice">NICE SHOT!</button>
+            <button type="button" class="chip-mini" data-quick="group" data-i18n="quickGroup">ON ME!</button>
+            <button type="button" class="chip-mini" data-quick="crate" data-i18n="quickCrate">CRATE HERE!</button>
+          </div>
+          <form id="chat-form" class="chat-form hidden" autocomplete="off">
+            <button type="button" id="btn-chat-scope" class="chat-scope">ALL</button>
+            <input id="chat-input" maxlength="140" autocomplete="off" spellcheck="false" placeholder="MESSAGE (TAB: ALL/TEAM)..." data-i18n-placeholder="chatPlaceholder" />
+          </form>
         </div>
         <div id="callout" class="hidden"></div>
         <div id="recap" class="hidden"></div>
@@ -76,8 +109,13 @@
             <button class="btn small" id="btn-copy" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
           </div>
           <div class="w-players" id="w-players"></div>
+          <div class="w-squad-actions hidden" id="w-squad-actions">
+            <button class="btn small bot-add" id="btn-duel-bot" type="button" data-i18n="addBotDuel">+ BOT (1V1)</button>
+            <button class="btn small squad-up" id="btn-form-squads" type="button" data-i18n="formSquads">FORM SQUADS (TEAMS + BOTS)</button>
+          </div>
           <div class="w-settings">
             <div id="w-mode"></div>
+            <div id="w-botskill" class="hidden"></div>
             <div id="w-maps"></div>
             <div id="w-goal"></div>
             <div id="w-loadout"></div>

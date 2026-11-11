@@ -4,6 +4,7 @@ import { TEAM_NAMES } from '/shared/modes.js';
 import { ENEMIES, MAX_HUMANS, SURVIVAL_SLOTS } from '/shared/survival.js';
 import { POOLS, POOL_IDS } from '/shared/weapons.js';
 import { Sfx } from './audio.js';
+import { createComms } from './comms.js';
 import { Fx, drawText } from './fx.js';
 import { ClientGame } from './game.js';
 import { applyDomI18n, onLangChange, toggleLang, tr } from './i18n.js';
@@ -226,7 +227,15 @@ $('#btn-group').addEventListener('click', () => {
   sfx.unlock();
   parkedRoom = null;
   renderParkedBar();
-  net.send({ t: 'create', name: playerName(), mode: 'ffa' });
+  net.send({ t: 'create', name: playerName(), mode: 'teams' });
+});
+$('#btn-duel-bot')?.addEventListener('click', () => {
+  sfx.unlock();
+  net.send({ t: 'addbot' });
+});
+$('#btn-form-squads')?.addEventListener('click', () => {
+  sfx.unlock();
+  net.send({ t: 'squads', mode: 'teams' });
 });
 $('#btn-coop').addEventListener('click', () => {
   sfx.unlock();
@@ -305,6 +314,7 @@ function enterSurvival(m) {
   show(ui.hud, true);
   show(ui.scoreboard, false);
   show(ui.wavebar, true);
+  comms.updateHudButtons();
   show($('#btn-copy2'), m === 'coop');
   show($('#so-best-row'), m === 'solo');
   $('#pause-note').textContent = tr(m === 'solo' ? 'soloPaused' : 'coopPaused');
@@ -546,6 +556,8 @@ function applyCoop(msg) {
     input.releaseAll();
     flash(tr('getReady'), game.mapName || '', 1300);
   }
+  comms.syncPeersWithRoom();
+  comms.updateHudButtons();
 }
 
 if (new URLSearchParams(location.search).has('debug')) window.sd = { game, solo };
@@ -638,6 +650,8 @@ function leave() {
 function toMenu({ keepParked = false } = {}) {
   if (solo.active) solo.stop();
   if (!keepParked) parkedRoom = null;
+  activeCommsCode = null;
+  comms.resetAll();
   mode = 'menu';
   room = null;
   coop = null;
@@ -724,6 +738,21 @@ const roomUi = createRoomUi({
   game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite, onPark: parkCurrentRoom,
 });
 const feel = createFeel({ game, sfx, survival: survivalMode });
+let activeCommsCode = null;
+const comms = createComms({
+  game,
+  net,
+  sfx,
+  toast,
+  getContext: () => ({
+    online: mode === 'room' || mode === 'coop',
+    mode,
+    room,
+    coop,
+    mySlot: game.slot,
+  }),
+});
+game.bubbleFor = (slot) => comms.bubbleFor(slot);
 const SOLO_DEATH_RULE = {
   duel: 'THAT DEATH SCORES FOR YOUR OPPONENT',
   ffa: 'DYING ON YOUR OWN COSTS 1 POINT',
@@ -796,6 +825,8 @@ function applyRoom(msg) {
   const waiting = msg.st === 'waiting';
   show(ui.waiting, waiting);
   if (waiting) roomUi.waiting(msg);
+  comms.syncPeersWithRoom();
+  comms.updateHudButtons();
 
   if (msg.st === 'countdown' && (!prev || prev.st !== 'countdown')) {
     countdownEnd = performance.now() + msg.timer * 1000;
@@ -891,16 +922,21 @@ net.on('joined', (msg) => {
   parkedRoom = null;
   renderParkedBar();
   if (msg.mode === 'coop') {
+    if (activeCommsCode !== msg.code) comms.resetAll();
+    activeCommsCode = msg.code;
     enterSurvival('coop');
     game.roomState = 'playing';
     coop = null;
     crewNames = [];
   } else {
     if (mode !== 'room') toMenu();
+    else if (activeCommsCode && activeCommsCode !== msg.code) comms.resetAll();
+    activeCommsCode = msg.code;
     mode = 'room';
     renderParkedBar();
   }
   game.setSlot(msg.slot);
+  comms.updateHudButtons();
   history.replaceState(null, '', `/?room=${msg.code}`);
   inviteCode = null;
   show($('#invite'), false);
@@ -986,6 +1022,8 @@ onLangChange(() => {
   }
   if (!ui.coopWait.classList.contains('hidden')) renderSurvivalLobby();
   if (!ui.soloOver.classList.contains('hidden')) renderSurvivalOverMaps();
+  if (!ui.waiting.classList.contains('hidden') && room) roomUi.waiting(room);
+  comms.updateHudButtons();
 });
 applyDomI18n();
 

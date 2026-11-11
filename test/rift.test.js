@@ -424,3 +424,177 @@ test('in-game HUD serves dedicated Pause and Main Menu buttons with EN/FR transl
   }
 });
 
+test('Hybrid Squads: private duel upgrades in-place to Teams, mixes humans + NPC bots, obeys orders, and yields bot slots to friends', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const host = mkClient();
+    const friend = mkClient();
+    const lateFriend = mkClient();
+    await Promise.all([host.open, friend.open, lateFriend.open]);
+
+    // 1. Creator makes a private duel and upgrades it live to Teams keeping the exact same code!
+    host.send({ t: 'create', name: 'sergio' });
+    const created = await host.wait((m) => m.t === 'joined' && m.mode === 'duel');
+    const code = created.code;
+
+    host.msgs.length = 0;
+    host.send({ t: 'squads', mode: 'teams' });
+    const upgraded = await host.wait((m) => m.t === 'room' && m.mode === 'teams' && m.max === 8);
+    assert.equal(upgraded.code, code, 'invite code stays identical after upgrading to Squads');
+
+    // 2. Friend joins via the original link; both join CYAN (team 0) and add NPC bots on PINK (team 1) & CYAN!
+    friend.send({ t: 'join', name: 'alex', code });
+    await friend.wait((m) => m.t === 'joined' && m.slot === 1);
+
+    friend.msgs.length = 0;
+    friend.send({ t: 'team', team: 0 });
+    await friend.wait((m) => m.t === 'room' && m.teams[0] === 0 && m.teams[1] === 0);
+
+    host.msgs.length = 0;
+    host.send({ t: 'botskill', skill: 'ace' });
+    host.send({ t: 'addbot', team: 0 }); // allied bot on CYAN
+    host.send({ t: 'addbot', team: 1 }); // enemy bot 1 on PINK
+    host.send({ t: 'addbot', team: 1 }); // enemy bot 2 on PINK
+    const withBots = await host.wait((m) => m.t === 'room' && m.bots?.filter(Boolean).length === 3);
+    assert.equal(withBots.botSkill, 'ace');
+    assert.equal(withBots.teams[2], 0, 'allied bot placed on CYAN');
+    assert.equal(withBots.teams[3], 1, 'enemy bot placed on PINK');
+    assert.equal(withBots.teams[4], 1, 'second enemy bot placed on PINK');
+
+    // 3. Fill remaining 3 slots with bots (total 8/8), then verify a real human friend evicts a bot!
+    host.msgs.length = 0;
+    host.send({ t: 'addbot', team: 0 });
+    host.send({ t: 'addbot', team: 1 });
+    host.send({ t: 'addbot', team: 0 });
+    await host.wait((m) => m.t === 'room' && m.names.filter(Boolean).length === 8);
+
+    lateFriend.send({ t: 'join', name: 'maya', code });
+    const mayaJoined = await lateFriend.wait((m) => m.t === 'joined');
+    assert.ok(mayaJoined.slot >= 2, 'real friend seamlessly replaced an NPC bot in an 8/8 room');
+
+    // 4. Issue tactical order ('hold') to allied CYAN bots and verify bot chat acknowledgment + start match!
+    host.msgs.length = 0;
+    host.send({ t: 'order', cmd: 'hold' });
+    const botAck = await host.wait((m) => m.t === 'chat' && m.bot === true);
+    assert.equal(botAck.scope, 'team');
+    assert.ok(botAck.text.includes('HOLDING'));
+
+    host.msgs.length = 0;
+    host.send({ t: 'start' });
+    const countdown = await host.wait((m) => m.t === 'room' && m.st === 'countdown');
+    assert.equal(countdown.mode, 'teams');
+
+    host.ws.close();
+    friend.ws.close();
+    lateFriend.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Rift Comms: global chat, team-only chat privacy, media state broadcast, and WebRTC signaling relay', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const c0 = mkClient();
+    const c1 = mkClient();
+    const c2 = mkClient();
+    await Promise.all([c0.open, c1.open, c2.open]);
+
+    c0.send({ t: 'create', name: 'alpha', mode: 'teams' });
+    const j0 = await c0.wait((m) => m.t === 'joined');
+    const code = j0.code;
+
+    c1.send({ t: 'join', name: 'bravo', code });
+    await c1.wait((m) => m.t === 'joined' && m.slot === 1); // team 1 (PINK)
+    c2.send({ t: 'join', name: 'charlie', code });
+    await c2.wait((m) => m.t === 'joined' && m.slot === 2); // team 0 (CYAN, same as alpha)
+
+    // 1. Team-scoped message from alpha (team 0) reaches charlie (team 0) and NEVER bravo (team 1)!
+    c0.msgs.length = 0;
+    c1.msgs.length = 0;
+    c2.msgs.length = 0;
+    c0.send({ t: 'chat', scope: 'team', text: 'Rush high ground!' });
+    const teamMsg = await c2.wait((m) => m.t === 'chat' && m.scope === 'team');
+    assert.equal(teamMsg.text, 'Rush high ground!');
+
+    // Global message reaches everyone including rival team (bravo)
+    c0.send({ t: 'chat', scope: 'all', text: 'GL HF everyone!' });
+    const allMsg = await c1.wait((m) => m.t === 'chat' && m.scope === 'all');
+    assert.equal(allMsg.text, 'GL HF everyone!');
+    assert.equal(
+      c1.msgs.some((m) => m.t === 'chat' && m.scope === 'team'),
+      false,
+      'rival team never receives secret team chat',
+    );
+
+    // 2. Live Mic/Cam media state broadcast + WebRTC peer-to-peer signaling relay
+    c1.msgs.length = 0;
+    c0.send({ t: 'media', mic: true, cam: true, vscope: 'team' });
+    const mediaMsg = await c1.wait((m) => m.t === 'media' && m.states?.[0]?.mic === true);
+    assert.equal(mediaMsg.states[0].cam, true);
+    assert.equal(mediaMsg.states[0].vscope, 'team');
+
+    c1.msgs.length = 0;
+    c0.send({ t: 'rtc', to: 1, data: { description: { type: 'offer', sdp: 'v=0-mock-sdp' } } });
+    const rtcMsg = await c1.wait((m) => m.t === 'rtc' && m.from === 0);
+    assert.equal(rtcMsg.data.description.sdp, 'v=0-mock-sdp');
+
+    c0.ws.close();
+    c1.ws.close();
+    c2.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+

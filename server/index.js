@@ -72,7 +72,7 @@ export function startServer({ port = Number(process.env.PORT) || 3030, host = pr
     else createReadStream(file).pipe(res);
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024, perMessageDeflate: false });
+  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024, perMessageDeflate: false });
   wss.on('connection', (ws) => {
     ws._socket?.setNoDelay?.(true);
     lobby.connect(ws);

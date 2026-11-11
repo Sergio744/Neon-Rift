@@ -15,6 +15,14 @@ export function cleanName(name) {
   return n || 'PLAYER';
 }
 
+export function cleanChat(text) {
+  return String(text ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140);
+}
+
 // Owns every connection and room, and drives all rooms from one fixed 60 Hz loop.
 export class Lobby {
   constructor() {
@@ -80,6 +88,8 @@ export class Lobby {
     const client = {
       id: this.nextClientId++, ws, name: 'PLAYER', room: null, slot: -1, rtt: 80,
       msgCount: 0, msgWindow: performance.now(),
+      chatCount: 0, chatWindow: performance.now(),
+      media: { mic: false, cam: false, vscope: 'all' },
     };
     this.clients.add(client);
     this.send(client, {
@@ -120,7 +130,8 @@ export class Lobby {
     const room = client.room;
     if (!room) return;
     room.leave(client);
-    if (room.count === 0) this.rooms.delete(room.code);
+    const empty = room instanceof Room ? room.humanCount === 0 : room.count === 0;
+    if (empty) this.rooms.delete(room.code);
   }
 
   createRoom(opts = {}) {
@@ -168,8 +179,63 @@ export class Lobby {
         }
         break;
       case 'team':
-        if (client.room instanceof Room) client.room.setTeam(client, msg.team);
+        if (client.room instanceof Room) client.room.setTeam(client, msg.team, msg.slot);
         break;
+      case 'addbot':
+        if (client.room instanceof Room) client.room.addBot(client, { team: msg.team, skill: msg.skill });
+        break;
+      case 'rmbot':
+        if (client.room instanceof Room) client.room.removeBot(client, msg.slot);
+        break;
+      case 'botskill':
+        if (client.room instanceof Room) client.room.setBotSkill(client, msg.skill);
+        break;
+      case 'squads':
+        if (client.room instanceof Room) client.room.upgradeToSquads(client, msg.mode);
+        break;
+      case 'order':
+        if (client.room instanceof Room) client.room.issueOrder(client, String(msg.cmd ?? ''));
+        break;
+      case 'chat': {
+        const room = client.room;
+        if (!room) break;
+        const now = performance.now();
+        if (now - client.chatWindow > 3000) {
+          client.chatWindow = now;
+          client.chatCount = 0;
+        }
+        if (++client.chatCount > 6) break;
+        const text = cleanChat(msg.text);
+        if (!text) break;
+        const isTeams = room instanceof Room && room.mode === 'teams';
+        const scope = msg.scope === 'team' && (isTeams || room instanceof CoopRoom) ? 'team' : 'all';
+        const team = isTeams ? room.teams[client.slot] : -1;
+        const payload = { t: 'chat', slot: client.slot, name: client.name, text, scope, team };
+        if (scope === 'team' && isTeams && team >= 0) room.broadcastTeam(team, payload);
+        else room.broadcast(payload);
+        break;
+      }
+      case 'media': {
+        const room = client.room;
+        if (!room) break;
+        client.media = {
+          mic: Boolean(msg.mic),
+          cam: Boolean(msg.cam),
+          vscope: msg.vscope === 'team' ? 'team' : 'all',
+        };
+        room.broadcastMedia?.();
+        break;
+      }
+      case 'rtc': {
+        const room = client.room;
+        if (!room) break;
+        const to = Number(msg.to);
+        if (!Number.isInteger(to) || to < 0 || to === client.slot || to >= room.clients.length) break;
+        const peer = room.clients[to];
+        if (!peer || !msg.data || typeof msg.data !== 'object') break;
+        this.send(peer, { t: 'rtc', from: client.slot, data: msg.data });
+        break;
+      }
       case 'join': {
         const code = String(msg.code ?? '').toUpperCase().trim();
         const room = this.rooms.get(code);
