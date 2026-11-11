@@ -12,6 +12,7 @@ import { Input } from './input.js';
 import { Net } from './net.js';
 import { SoloServer } from './solo.js';
 import { chips, poolPicker, settingRow } from './ui/controls.js';
+import { createArenaUi } from './ui/arena.js';
 import { createFeel } from './ui/feel.js';
 import { createHud } from './ui/hud.js';
 import { createRoomUi, isGroup, ranking, sizeTag, slotColor } from './ui/room.js';
@@ -65,6 +66,7 @@ let sv = null; // last survival state, solo or co-op
 let survNextMap = 'neon';
 let crewNames = [];
 let room = null;
+let arenaState = null;
 let parkedRoom = null; // { code, mode } while a private room waits in the background
 let alertTimer = null;
 let lastState = '';
@@ -135,7 +137,7 @@ function copyText(text) {
 }
 
 function copyInvite(e) {
-  const code = room?.code ?? coop?.code ?? parkedRoom?.code;
+  const code = room?.code ?? coop?.code ?? arenaState?.code ?? parkedRoom?.code;
   if (!code) return;
   copyText(inviteLink(code));
   sfx.play('switch');
@@ -228,6 +230,12 @@ $('#btn-group').addEventListener('click', () => {
   parkedRoom = null;
   renderParkedBar();
   net.send({ t: 'create', name: playerName(), mode: 'teams' });
+});
+$('#btn-arena')?.addEventListener('click', () => {
+  sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
+  net.send({ t: 'arena', name: playerName() });
 });
 $('#btn-duel-bot')?.addEventListener('click', () => {
   sfx.unlock();
@@ -652,12 +660,15 @@ function toMenu({ keepParked = false } = {}) {
   if (!keepParked) parkedRoom = null;
   activeCommsCode = null;
   comms.resetAll();
+  arenaUi?.hideAll();
   mode = 'menu';
   room = null;
+  arenaState = null;
   coop = null;
   sv = null;
   clearTimeout(centerTimer);
   game.leave();
+  show($('#bottom'), true);
   game.net = net;
   game.team = [0, 1];
   game.colors = PLAYER_COLORS.slice();
@@ -733,9 +744,12 @@ updateMuteLabel();
 
 const survivalMode = () => mode === 'solo' || mode === 'coop';
 // The kill feed says YOU everywhere but in a duel, where both names are on the scoreboard.
-const hud = createHud({ game, sfx, showYou: () => survivalMode() || isGroup(room) });
+const hud = createHud({ game, sfx, showYou: () => survivalMode() || mode === 'arena' || isGroup(room) });
 const roomUi = createRoomUi({
   game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite, onPark: parkCurrentRoom,
+});
+const arenaUi = createArenaUi({
+  game, net, maps: () => maps, sfx, onCopy: copyInvite,
 });
 const feel = createFeel({ game, sfx, survival: survivalMode });
 let activeCommsCode = null;
@@ -745,9 +759,9 @@ const comms = createComms({
   sfx,
   toast,
   getContext: () => ({
-    online: mode === 'room' || mode === 'coop',
-    mode,
-    room,
+    online: mode === 'room' || mode === 'coop' || mode === 'arena',
+    mode: mode === 'arena' ? 'room' : mode,
+    room: mode === 'arena' ? arenaState : room,
     coop,
     mySlot: game.slot,
   }),
@@ -874,11 +888,61 @@ function renderOver(msg) {
   });
 }
 
+function applyArena(msg) {
+  const prev = arenaState;
+  arenaState = msg;
+  game.roomState = msg.st === 'idle' ? 'waiting' : msg.st;
+  game.names = msg.names.map((n, i) => n || `P${i + 1}`);
+  game.colors = msg.names.map((_, s) => slotColor(msg, s));
+  game.team = msg.names.map((_, s) => (msg.st !== 'idle' && msg.teams[s] >= 0 ? msg.teams[s] : s));
+  if (msg.pool !== undefined) game.setPool(msg.pool);
+
+  show(ui.waiting, false);
+  show(ui.scoreboard, true);
+  show(ui.wavebar, false);
+  show($('#bottom'), !game.spectating);
+
+  arenaUi.renderHub(msg);
+  if (boardOn) roomUi.board(msg, true);
+  comms.syncPeersWithRoom();
+  comms.updateHudButtons();
+
+  if (msg.st === 'countdown' && (!prev || prev.st !== 'countdown')) {
+    countdownEnd = performance.now() + msg.timer * 1000;
+    lastBeep = -1;
+  }
+  if (msg.st === 'playing' && prev && prev.st === 'countdown') {
+    sfx.play('go', 800);
+    center('FIGHT!', '');
+    setTimeout(() => {
+      if (arenaState && arenaState.st === 'playing' && ui.center.textContent === 'FIGHT!') center('', '', false);
+    }, 900);
+  }
+  if (msg.suddenDeath && (!prev || !prev.suddenDeath)) {
+    sfx.play('beep', 800);
+    flash(tr('suddenDeath'), '', 1600);
+  }
+  if (msg.st === 'over' && (!prev || prev.st !== 'over')) {
+    const myTeam = game.slot >= 0 ? msg.teams[game.slot] : -1;
+    const label =
+      myTeam >= 0
+        ? msg.winner === myTeam
+          ? 'VICTORY'
+          : 'DEFEAT'
+        : msg.winner >= 0
+          ? `${TEAM_NAMES[msg.winner]} WINS`
+          : 'DRAW';
+    sfx.play(myTeam >= 0 && msg.winner !== myTeam ? 'lose' : 'win', 800);
+    flash(label, '', 2400);
+  }
+}
+
 // Hold TAB for the ranked scoreboard in online rooms.
 let boardOn = false;
 input.on('board', (on) => {
-  boardOn = on && mode === 'room' && !!room;
-  roomUi.board(room, boardOn);
+  const src = mode === 'arena' ? arenaState : mode === 'room' ? room : null;
+  boardOn = on && !!src;
+  roomUi.board(src, boardOn);
 });
 
 // ---------- network ----------
@@ -901,7 +965,7 @@ net.on('close', () => {
     renderParkedBar();
   }
   if (game.active && !solo.active) {
-    rejoinCode = (mode === 'room' ? room?.code : coop?.code) ?? null;
+    rejoinCode = (mode === 'room' ? room?.code : mode === 'arena' ? arenaState?.code : coop?.code) ?? null;
     toMenu();
     toast(rejoinCode ? 'CONNECTION LOST - REJOINING...' : 'CONNECTION LOST');
   }
@@ -924,15 +988,28 @@ net.on('joined', (msg) => {
   if (msg.mode === 'coop') {
     if (activeCommsCode !== msg.code) comms.resetAll();
     activeCommsCode = msg.code;
+    arenaUi.hideAll();
     enterSurvival('coop');
     game.roomState = 'playing';
     coop = null;
     crewNames = [];
+  } else if (msg.mode === 'arena') {
+    if (mode !== 'arena') toMenu();
+    else if (activeCommsCode && activeCommsCode !== msg.code) comms.resetAll();
+    activeCommsCode = msg.code;
+    mode = 'arena';
+    if (msg.actorId) arenaUi.setActorId(msg.actorId);
+    game.spectating = Boolean(msg.spectating || msg.slot < 0);
+    show($('#bottom'), !game.spectating);
+    renderParkedBar();
   } else {
     if (mode !== 'room') toMenu();
     else if (activeCommsCode && activeCommsCode !== msg.code) comms.resetAll();
+    arenaUi.hideAll();
     activeCommsCode = msg.code;
     mode = 'room';
+    game.spectating = false;
+    show($('#bottom'), true);
     renderParkedBar();
   }
   game.setSlot(msg.slot);
@@ -961,6 +1038,27 @@ net.on('map', (msg) => {
   game.loadMap(msg);
 });
 net.on('room', applyRoom);
+net.on('arena', applyArena);
+net.on('arena_role', (msg) => {
+  game.setSlot(msg.slot);
+  game.spectating = Boolean(msg.spectating || msg.slot < 0);
+  game.pending = [];
+  show($('#bottom'), !game.spectating);
+  input.enabled = !game.spectating && ui.pause.classList.contains('hidden');
+  if (game.spectating) input.releaseAll();
+  if (arenaState) arenaUi.renderHub(arenaState);
+  comms.updateHudButtons();
+});
+net.on('foul', (msg) => {
+  sfx.play('hurt', 800);
+  const ruleLabel = tr(`rule_${msg.rule}`);
+  const pen = msg.pointPenalty ? ' (-1 PT!)' : ' (-12 HP)';
+  toast(`⚡ ${tr('foulAlert')}: ${msg.name} — ${ruleLabel}${pen}`);
+});
+net.on('sos_joined', (msg) => {
+  sfx.play('unlock', 800);
+  toast(`🆘 ${msg.helperName} → ${msg.callerName}!`);
+});
 net.on('coop', applyCoop);
 net.on('s', (msg) => {
   if (msg.sv && mode === 'coop') survivalSnapshot(msg);
@@ -1023,31 +1121,36 @@ onLangChange(() => {
   if (!ui.coopWait.classList.contains('hidden')) renderSurvivalLobby();
   if (!ui.soloOver.classList.contains('hidden')) renderSurvivalOverMaps();
   if (!ui.waiting.classList.contains('hidden') && room) roomUi.waiting(room);
+  arenaUi.refreshLang();
   comms.updateHudButtons();
 });
+
 applyDomI18n();
 
 // ---------- per-frame HUD ----------
 
 function updateHud(dt) {
-  if (!game.active || mode === 'menu' || (mode === 'room' && !room)) return;
+  const activeRoom = mode === 'arena' ? arenaState : room;
+  if (!game.active || mode === 'menu' || ((mode === 'room' || mode === 'arena') && !activeRoom)) return;
   const h = game.hud();
-  const hp = Math.max(0, h.hp);
-  ui.hpFill.style.width = `${hp}%`;
-  const hpTxt = String(Math.ceil(hp));
-  if (ui.hpText.textContent !== hpTxt) ui.hpText.textContent = hpTxt;
-  ui.hpBar.classList.toggle('low', hp <= 25);
-  ui.hpBar.classList.toggle('mid', hp > 25 && hp <= 50);
-  ui.fuelFill.style.width = `${Math.max(0, h.fuel)}%`;
-  hud.update(h, dt);
-  feel.update(h, dt);
+  if (!game.spectating) {
+    const hp = Math.max(0, h.hp);
+    ui.hpFill.style.width = `${hp}%`;
+    const hpTxt = String(Math.ceil(hp));
+    if (ui.hpText.textContent !== hpTxt) ui.hpText.textContent = hpTxt;
+    ui.hpBar.classList.toggle('low', hp <= 25);
+    ui.hpBar.classList.toggle('mid', hp > 25 && hp <= 50);
+    ui.fuelFill.style.width = `${Math.max(0, h.fuel)}%`;
+    hud.update(h, dt);
+    feel.update(h, dt);
+  }
   if (mode !== 'solo') setText(ui.netinfo, `${Math.round(h.rtt)} MS`);
   if (mode === 'solo' || mode === 'coop') {
     updateWaveHud();
     return;
   }
 
-  if (room.st === 'countdown') {
+  if (activeRoom.st === 'countdown') {
     const left = (countdownEnd - performance.now()) / 1000;
     const n = Math.max(1, Math.ceil(left));
     if (n !== lastBeep && left > 0) {
@@ -1055,11 +1158,11 @@ function updateHud(dt) {
       sfx.play('beep', 800);
       center(String(n), 'GET READY');
     }
-  } else if (room.st === 'playing' || room.st === 'waiting') {
-    if (h.dead && game.present[game.slot] && ui.center.textContent !== 'FIGHT!') {
+  } else if (activeRoom.st === 'playing' || activeRoom.st === 'waiting' || activeRoom.st === 'idle') {
+    if (!game.spectating && h.dead && game.present[game.slot] && ui.center.textContent !== 'FIGHT!') {
       const t = Math.max(0, h.respawnT);
       center('', t > 0 ? `RESPAWN IN ${t.toFixed(1)}` : '', false);
-    } else if (!h.dead && ui.sub.textContent.startsWith('RESPAWN')) {
+    } else if ((!h.dead || game.spectating) && ui.sub.textContent.startsWith('RESPAWN')) {
       center(ui.center.textContent === 'FIGHT!' ? 'FIGHT!' : '', '', false);
     }
   }

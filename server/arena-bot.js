@@ -1,5 +1,6 @@
 import { BTN, DT, PHYS } from '../shared/constants.js';
 import { ITEM } from '../shared/game/items.js';
+import { isWeaponForbidden } from '../shared/rules.js';
 import { W, WEAPONS } from '../shared/weapons.js';
 
 export const BOT_CALLSIGNS = ['NOVA', 'VEX', 'VOLT', 'KIRA', 'ECHO', 'LYRA', 'AXEL', 'ZERO'];
@@ -58,8 +59,9 @@ function hasUsableAmmo(p, g, w) {
   return p.ammo[w] > 0;
 }
 
-// Picks the strongest owned weapon with remaining ammo for the engagement distance.
-function pickWeaponForDist(p, g, dist) {
+// Picks the strongest owned & rule-legal weapon with remaining ammo for the engagement distance.
+function pickWeaponForDist(p, g, dist, rules) {
+  if (rules?.pistolOnly) return W.pistol;
   const candidates =
     dist < 150
       ? [W.shotgun, W.flame, W.smg, W.rifle, W.prism, W.pistol]
@@ -67,7 +69,7 @@ function pickWeaponForDist(p, g, dist) {
         ? [W.rifle, W.prism, W.rocket, W.vortex, W.smg, W.shotgun, W.rail, W.pistol]
         : [W.rail, W.sniper, W.prism, W.rifle, W.rocket, W.toomuch, W.smg, W.pistol];
   for (const w of candidates) {
-    if (hasUsableAmmo(p, g, w)) return w;
+    if (!isWeaponForbidden(rules, w) && hasUsableAmmo(p, g, w)) return w;
   }
   return W.pistol;
 }
@@ -161,9 +163,10 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
   }
 
   const S = BOT_SKILLS[bot.skill] || BOT_SKILLS.veteran;
+  const rules = room.activeRules || null;
   const t = g.terrain;
   const target = pickEnemy(room, slot, p, bot);
-  const item = room.state === 'playing' ? pickHelpfulItem(room, slot, p, S.crateRange) : null;
+  const item = room.state === 'playing' && !rules?.noOrbs ? pickHelpfulItem(room, slot, p, S.crateRange) : null;
 
   let b = 0;
   let move = 0;
@@ -197,8 +200,8 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
     bot.seen = bot.los ? Math.min(3, bot.seen + DT) : Math.max(0, bot.seen - DT * 2.2);
 
     bot.wSwapT -= DT;
-    if (bot.wSwapT <= 0 || !hasUsableAmmo(p, g, bot.w)) {
-      bot.w = pickWeaponForDist(p, g, dist);
+    if (bot.wSwapT <= 0 || !hasUsableAmmo(p, g, bot.w) || isWeaponForbidden(rules, bot.w)) {
+      bot.w = pickWeaponForDist(p, g, dist, rules);
       bot.wSwapT = 0.65 + rng() * 0.6;
     }
     const WDef = WEAPONS[bot.w];
@@ -276,7 +279,7 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
 
   bot.jumpLock = Math.max(0, bot.jumpLock - DT);
   const blocked = move !== 0 && t.rectSolid(p.x + move * 14 - 3, p.y - 40, p.x + move * 14 + 3, p.y - 12);
-  if (wantUp && p.fuel > 0.15) {
+  if (wantUp && p.fuel > 0.15 && !rules?.noJetpack) {
     if (!p.grounded || bot.jumpLock <= 0) b |= BTN.JUMP;
   } else if (blocked && p.grounded && bot.jumpLock <= 0) {
     b |= BTN.JUMP;
@@ -305,7 +308,7 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
         if (WDef.auto || p.cd <= 0) b |= BTN.FIRE;
         if (bot.burstT <= 0) bot.restT = S.rest * (0.6 + rng() * 0.8);
       }
-      if (bot.skill === 'ace' && p.nadeCd <= 0 && dist > 150 && dist < 390 && rng() < 0.008) {
+      if (bot.skill === 'ace' && !rules?.noExplosives && p.nadeCd <= 0 && dist > 150 && dist < 390 && rng() < 0.008) {
         b |= BTN.ALT;
       }
     }

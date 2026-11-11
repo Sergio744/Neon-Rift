@@ -12,6 +12,7 @@ import { Survival } from '../shared/survival.js';
 import { FULL_POOL, PRISM, RIFT_POOL, W, WEAPONS, owns, poolStart, sanitizePool } from '../shared/weapons.js';
 import { startServer } from '../server/index.js';
 import { Room } from '../server/room.js';
+import { launchAutonomousAgent } from '../agents/autonomous-player.mjs';
 
 function duel(map = 'flat') {
   const g = new Game(map, 4242);
@@ -596,5 +597,209 @@ test('Rift Comms: global chat, team-only chat privacy, media state broadcast, an
     await srv.close();
   }
 });
+
+test('Rift Colosseum: challenges, live spectators, custom rule referee fouls, and voluntary SOS reinforcements', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 6000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const fA = mkClient();
+    const fB = mkClient();
+    const spec = mkClient();
+    await Promise.all([fA.open, fB.open, spec.open]);
+
+    fA.send({ t: 'arena', name: 'sergio', priv: true, autoAi: false, initialAis: 0 });
+    const jA = await fA.wait((m) => m.t === 'joined' && m.mode === 'arena');
+    const code = jA.code;
+
+    fB.send({ t: 'join', name: 'rival', code });
+    const jB = await fB.wait((m) => m.t === 'joined' && m.mode === 'arena');
+
+    spec.send({ t: 'join', name: 'viewer', code });
+    await spec.wait((m) => m.t === 'joined' && m.mode === 'arena');
+
+    // 1. Sergio challenges Rival with Custom Rules (noExplosives) and a 60s Match Timer!
+    fB.msgs.length = 0;
+    fA.send({
+      t: 'challenge',
+      targetId: jB.actorId,
+      map: 'neon',
+      goal: 5,
+      timeLimit: 60,
+      rules: { noExplosives: true },
+    });
+    const chArena = await fB.wait((m) => m.t === 'arena' && m.challenge?.targetId === jB.actorId);
+    assert.equal(chArena.challenge.timeLimit, 60);
+    assert.equal(chArena.challenge.rules.noExplosives, true);
+
+    // 2. Rival accepts -> Viewer automatically moves to Spectator mode (`spectating: true, slot: -1`) and receives live snapshots!
+    spec.msgs.length = 0;
+    fA.msgs.length = 0;
+    fB.send({ t: 'challenge_reply', accept: true });
+
+    const specRole = await spec.wait((m) => m.t === 'arena_role');
+    assert.equal(specRole.spectating, true);
+    assert.equal(specRole.slot, -1);
+
+    // Speed up countdown on server hub for deterministic fast test
+    const hub = srv.lobby.rooms.get(code);
+    hub.timer = 0.01;
+    await fA.wait((m) => m.t === 'arena' && m.st === 'playing');
+    const liveSnap = await spec.wait((m) => m.t === 's' && Array.isArray(m.p));
+    assert.ok(liveSnap.p[0] && liveSnap.p[1], 'spectator receives real-time 60 Hz snapshots of both fighters');
+
+    // 3. Referee enforces `noExplosives`: attempting BTN.ALT grenade triggers a Foul shock & blocks grenade!
+    fA.msgs.length = 0;
+    fA.send({ t: 'i', l: [[1, BTN.ALT, 0, W.pistol, hub.game.tick, 0]] });
+    const foul = await fA.wait((m) => m.t === 'foul' && m.rule === 'noExplosives');
+    assert.equal(foul.name, 'SERGIO');
+    assert.equal(hub.game.projs.length, 0, 'illegal grenade was blocked by Referee');
+
+    // 4. Mid-match SOS ("Appel à l'aide"): Sergio calls SOS, Spectator Viewer chooses to jump in and help!
+    spec.msgs.length = 0;
+    fA.send({ t: 'sos' });
+    const sosArena = await spec.wait((m) => m.t === 'arena' && m.sos?.callerName === 'SERGIO');
+    assert.equal(sosArena.sos.team, 0);
+
+    spec.msgs.length = 0;
+    spec.send({ t: 'sos_reply', accept: true });
+    const promoted = await spec.wait((m) => m.t === 'arena_role' && m.spectating === false);
+    assert.ok(promoted.slot >= 2, 'spectator promoted into live arena slot');
+    assert.equal(promoted.team, 0, 'helper joined caller team');
+    await fA.wait((m) => m.t === 'sos_joined' && m.helperName === 'VIEWER');
+
+    fA.ws.close();
+    fB.ws.close();
+    spec.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Autonomous AI Citizens & external WebSocket AI Agents play like humans (initiate/accept duels, chat, observe, fight)', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 6000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  let extAgent = null;
+  try {
+    const human = mkClient();
+    await human.open;
+
+    human.send({ t: 'arena', name: 'sergio', priv: true, autoAi: true, initialAis: 2 });
+    const joined = await human.wait((m) => m.t === 'joined' && m.mode === 'arena');
+    const hub = srv.lobby.rooms.get(joined.code);
+
+    // 1. Connect external AI agent script over WebSocket into the exact same Colosseum!
+    extAgent = launchAutonomousAgent({
+      url: `ws://127.0.0.1:${srv.port}/ws`,
+      name: 'OMEGA-IA',
+      room: joined.code,
+    });
+    const agentGreet = await human.wait((m) => m.t === 'chat' && m.name === 'OMEGAIA');
+    assert.ok(agentGreet.text.includes('ONLINE'));
+
+    // 2. Human challenges external AI agent -> external AI agent autonomously accepts over WebSocket!
+    const arenaInfo = hub.info();
+    const omegaActor = arenaInfo.roster.find((r) => r.name === 'OMEGAIA');
+    assert.ok(omegaActor, 'external AI agent appears in Colosseum roster');
+
+    human.msgs.length = 0;
+    human.send({
+      t: 'challenge',
+      targetId: omegaActor.id,
+      map: 'neon',
+      goal: 3,
+      timeLimit: 60,
+      rules: { noJetpack: true },
+    });
+    const started = await human.wait((m) => m.t === 'arena' && m.st === 'countdown');
+    assert.equal(started.rules.noJetpack, true);
+
+    // 3. Verify built-in Autonomous AI Citizens also initiate challenges on their own when idle!
+    hub.returnToOpenRing();
+    human.msgs.length = 0;
+    hub.idleChallengeCd = 0.05;
+    hub.stepSocialAi(0.2);
+    const aiProposed = await human.wait((m) => m.t === 'arena' && Boolean(m.challenge));
+    assert.ok(aiProposed.challenge.fromId.startsWith('ai'), 'built-in AI citizen initiated a challenge autonomously');
+
+    human.ws.close();
+  } finally {
+    extAgent?.close();
+    await srv.close();
+  }
+});
+
+test('Match Timer resolves winner at 0:00 and triggers Sudden Death on a tie', () => {
+  const room = new Room('TIME', { mode: 'duel', timeLimit: 60, goal: 5 });
+  const fakeWs = { readyState: 3, send() {} };
+  const c0 = { id: 1, ws: fakeWs, name: 'A', slot: -1, rtt: 10 };
+  const c1 = { id: 2, ws: fakeWs, name: 'B', slot: -1, rtt: 10 };
+  room.join(c0);
+  room.join(c1);
+
+  // Advance past countdown into playing
+  room.state = 'playing';
+  room.applyRules();
+  assert.equal(room.matchTimer, 60);
+
+  // 1. Tied 1-1 when timer hits 0 -> enters Sudden Death, then next kill wins immediately!
+  room.scores = [1, 1];
+  room.matchTimer = 0.01;
+  room.tick();
+  assert.equal(room.state, 'playing');
+  assert.equal(room.suddenDeath, true, 'tie at 0:00 triggers Sudden Death');
+
+  room.onKill(1, 0); // P0 scores 2-1 (below goal 5, but Sudden Death!)
+  assert.equal(room.state, 'over');
+  assert.equal(room.winner, 0, 'next point in Sudden Death wins immediately');
+});
+
 
 

@@ -2054,6 +2054,193 @@ input:focus {
   color: var(--bad);
 }
 
+/* ---------- Rift Arena Colosseum, Match Timer, Rules & Spectator HUD ---------- */
+
+.mode-card.arena-card {
+  border-color: #ffd23f;
+  background: linear-gradient(135deg, rgba(255, 210, 63, 0.14), rgba(62, 230, 255, 0.1));
+}
+
+.mode-card.arena-card b {
+  color: #ffd23f;
+}
+
+.timer-text {
+  color: #ffd23f;
+  font-size: calc(var(--u) * 8.5);
+  letter-spacing: calc(var(--u) * 0.6);
+}
+
+.timer-text.urgent {
+  color: var(--bad);
+  animation: pb-pulse 0.65s ease-in-out infinite;
+}
+
+#active-rules-bar {
+  position: absolute;
+  top: calc(var(--u) * 32);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--u) * 2.5);
+  pointer-events: none;
+}
+
+.rule-pill {
+  padding: calc(var(--u) * 1.5) calc(var(--u) * 3.5);
+  background: rgba(255, 59, 59, 0.18);
+  border: calc(var(--u) * 0.8) solid var(--bad);
+  color: #ffb8b8;
+  font-size: calc(var(--u) * 4.5);
+  letter-spacing: calc(var(--u) * 0.4);
+}
+
+.hud-btn.sos-btn {
+  border-color: #ffd23f;
+  color: #ffd23f;
+  background: rgba(255, 210, 63, 0.14);
+}
+
+.hud-btn.sos-btn:hover:not(:disabled) {
+  background: rgba(255, 210, 63, 0.28);
+  color: #ffffff;
+}
+
+.hud-btn.sos-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.arena-box {
+  top: calc(var(--u) * 44);
+  right: calc(var(--u) * 6);
+  left: auto;
+  transform: none;
+  width: calc(var(--u) * 245);
+  max-height: calc(var(--u) * 330);
+  overflow-y: auto;
+  z-index: 7;
+}
+
+.arena-roster {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 2.5);
+  max-height: calc(var(--u) * 115);
+  overflow-y: auto;
+}
+
+.ar-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 2.2) calc(var(--u) * 3.5);
+  background: rgba(255, 255, 255, 0.04);
+  border: calc(var(--u) * 0.8) solid rgba(255, 255, 255, 0.08);
+  font-size: calc(var(--u) * 5.2);
+}
+
+.ar-row.me {
+  border-color: var(--accent);
+}
+
+.ar-badge {
+  padding: calc(var(--u) * 0.8) calc(var(--u) * 2);
+  font-size: calc(var(--u) * 4.2);
+  font-weight: 700;
+}
+
+.ar-badge.ai {
+  background: rgba(255, 210, 63, 0.2);
+  border: calc(var(--u) * 0.7) solid #ffd23f;
+  color: #ffd23f;
+}
+
+.ar-badge.hu {
+  background: rgba(62, 230, 255, 0.2);
+  border: calc(var(--u) * 0.7) solid var(--accent);
+  color: var(--accent);
+}
+
+.ar-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-ally.active {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.arena-alert {
+  position: absolute;
+  top: calc(var(--u) * 46);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 3.5);
+  padding: calc(var(--u) * 5) calc(var(--u) * 8);
+  background: rgba(12, 9, 28, 0.96);
+  border: calc(var(--u) * 1.4) solid var(--accent);
+  box-shadow: 0 0 calc(var(--u) * 14) rgba(62, 230, 255, 0.35);
+  pointer-events: auto;
+  text-align: center;
+}
+
+.arena-alert.sos {
+  top: calc(var(--u) * 88);
+  border-color: #ffd23f;
+  box-shadow: 0 0 calc(var(--u) * 16) rgba(255, 210, 63, 0.45);
+}
+
+.ca-title {
+  font-size: calc(var(--u) * 7);
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.ca-title.sos-pulse {
+  color: #ffd23f;
+}
+
+.ca-meta {
+  font-size: calc(var(--u) * 5);
+}
+
+.ca-btns {
+  display: flex;
+  gap: calc(var(--u) * 4);
+}
+
+.spec-bar {
+  position: absolute;
+  bottom: calc(var(--u) * 10);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 4);
+  padding: calc(var(--u) * 3.5) calc(var(--u) * 7);
+  background: rgba(12, 9, 28, 0.92);
+  border: calc(var(--u) * 1.2) solid var(--accent);
+  pointer-events: auto;
+  font-size: calc(var(--u) * 5.8);
+}
+
+.spec-tag {
+  color: var(--accent);
+  letter-spacing: calc(var(--u) * 0.6);
+}
+
 
 
 

@@ -1,5 +1,6 @@
 import { PLAYER_COLORS } from '/shared/constants.js';
 import { GROUP_MODES, MODES, TEAM_COLORS, TEAM_NAMES } from '/shared/modes.js';
+import { RULE_DEFS, TIME_LIMITS, formatClock } from '/shared/rules.js';
 import { tr } from '../i18n.js';
 import { chips, poolPicker, settingRow } from './controls.js';
 
@@ -191,6 +192,31 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     const goals = MODES[msg.mode].goals.map((g) => ({ id: g, name: String(g) }));
     const goalLabel = { duel: tr('pointsToWin'), ffa: tr('killsToWin'), teams: tr('teamKills') }[msg.mode];
     settingRow($('#w-goal'), goalLabel, goals, msg.goal, (goal) => net.send({ t: 'setopts', goal }), !host);
+    const timerRow = $('#w-timer');
+    if (timerRow) {
+      const timers = TIME_LIMITS.map((s) => ({ id: s, name: s === 0 ? tr('unlimitedTime') : formatClock(s) }));
+      settingRow(timerRow, tr('timerLabel'), timers, msg.timeLimit || 0, (timeLimit) =>
+        net.send({ t: 'setopts', timeLimit }), !host);
+    }
+    const rulesRow = $('#w-rules');
+    if (rulesRow) {
+      rulesRow.textContent = '';
+      rulesRow.className = 'w-row';
+      rulesRow.appendChild(el('span', 'w-label', tr('rulesLabel')));
+      const list = el('div', 'chips');
+      const curRules = msg.rules || {};
+      for (const r of RULE_DEFS.filter((d) => d.id !== 'noSos')) {
+        const b = el('button', `chip${curRules[r.id] ? ' active' : ''}`, tr(`rule_${r.id}`));
+        b.type = 'button';
+        b.disabled = !host;
+        b.addEventListener('click', () => {
+          const next = { ...curRules, [r.id]: !curRules[r.id] };
+          net.send({ t: 'setopts', rules: next });
+        });
+        list.appendChild(b);
+      }
+      rulesRow.appendChild(list);
+    }
     const loadouts = [
       { id: 'drops', name: tr('riftDrops') },
       { id: 'full', name: tr('fullArsenal') },
@@ -238,6 +264,22 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     }
     const goal = msg.st === 'waiting' ? tr('warmup') : `${tr('firstTo')} ${msg.goal}`;
     setText($('#goal-text'), `${isGroup(msg) && msg.st !== 'waiting' ? `${MODES[msg.mode].name} - ` : ''}${goal}`);
+    const timerEl = $('#timer-text');
+    if (timerEl) {
+      const showTimer = msg.st === 'playing' && (msg.timeLimit > 0 || msg.suddenDeath);
+      timerEl.classList.toggle('hidden', !showTimer);
+      if (showTimer) {
+        timerEl.textContent = msg.suddenDeath ? tr('suddenDeath') : formatClock(msg.matchTimer || 0);
+        timerEl.classList.toggle('urgent', Boolean(msg.suddenDeath || (msg.matchTimer > 0 && msg.matchTimer <= 15)));
+      }
+    }
+    const rulesBar = $('#active-rules-bar');
+    if (rulesBar) {
+      const activeIds = RULE_DEFS.filter((d) => msg.rules?.[d.id]);
+      rulesBar.classList.toggle('hidden', activeIds.length === 0 || msg.st === 'waiting');
+      rulesBar.textContent = '';
+      for (const r of activeIds) rulesBar.appendChild(el('span', 'rule-pill', tr(`rule_${r.id}`)));
+    }
     const m = maps().find((x) => x.id === msg.map);
     setText($('#map-text'), m ? m.name : msg.map);
     $('#board-hint').classList.toggle('hidden', !isGroup(msg));

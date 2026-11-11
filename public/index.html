@@ -46,8 +46,39 @@
             <span data-i18n="hudCam">CAM</span>
           </button>
           <button class="hud-btn comms-btn hidden" id="btn-hud-vscope" type="button" data-i18n="voiceAll">VOICE: ALL</button>
+          <button class="hud-btn sos-btn hidden" id="btn-hud-sos" type="button" title="Y">
+            <span data-i18n="sosBtn">SOS HELP</span>
+          </button>
         </div>
         <div id="holo-cams" class="hidden"></div>
+        <div id="active-rules-bar" class="hidden"></div>
+        <div id="challenge-alert" class="arena-alert hidden"></div>
+        <div id="sos-alert" class="arena-alert sos hidden"></div>
+        <div id="spec-bar" class="spec-bar hidden">
+          <span class="spec-tag" data-i18n="spectatingLabel">SPECTATING</span>
+          <button class="btn small" id="btn-spec-prev" type="button">◄</button>
+          <b id="spec-target-name">AUTO CAM</b>
+          <button class="btn small" id="btn-spec-next" type="button">►</button>
+        </div>
+        <div id="arena-box" class="waitbox arena-box hidden">
+          <div class="w-head">
+            <div class="w-title" data-i18n="arenaHubTitle">RIFT COLOSSEUM</div>
+            <b class="w-count" id="arena-count">0/12</b>
+            <button class="btn small w-fold" id="btn-arena-fold" type="button" aria-expanded="true" data-i18n="hide">HIDE</button>
+          </div>
+          <div class="w-code">
+            <span><span data-i18n="roomLabel">ROOM</span> <b id="arena-code">----</b></span>
+            <button class="btn small" id="btn-arena-copy" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
+            <button class="btn small bot-add" id="btn-arena-addai" type="button" data-i18n="addAiCitizen">+ AUTONOMOUS AI</button>
+          </div>
+          <div id="arena-roster" class="arena-roster"></div>
+          <div id="arena-cfg" class="w-settings">
+            <div id="ar-maps"></div>
+            <div id="ar-goal"></div>
+            <div id="ar-timer"></div>
+            <div id="ar-rules"></div>
+          </div>
+        </div>
         <div id="chat-panel" class="hidden">
           <div id="squad-orders" class="squad-orders hidden">
             <span class="dim"><kbd>G</kbd></span>
@@ -73,6 +104,7 @@
           <div class="side s0"><span class="nm">P1</span><b class="sc">0</b></div>
           <div class="mid">
             <span id="goal-text">FIRST TO 5</span>
+            <b id="timer-text" class="timer-text hidden">2:00</b>
             <span id="map-text"></span>
           </div>
           <div class="side s1"><b class="sc">0</b><span class="nm">P2</span></div>
@@ -118,6 +150,8 @@
             <div id="w-botskill" class="hidden"></div>
             <div id="w-maps"></div>
             <div id="w-goal"></div>
+            <div id="w-timer"></div>
+            <div id="w-rules"></div>
             <div id="w-loadout"></div>
             <div id="w-pool"></div>
           </div>
@@ -207,6 +241,9 @@
               </button>
               <button class="mode-card group" id="btn-group" type="button">
                 <b data-i18n="groupTitle">GROUP ROOM</b><span data-i18n="groupDesc">2 TO 8 PLAYERS - FREE FOR ALL OR TEAMS</span>
+              </button>
+              <button class="mode-card arena-card" id="btn-arena" type="button">
+                <b data-i18n="arenaTitle">RIFT ARENA (HUMANS &amp; AI)</b><span data-i18n="arenaDesc">CHALLENGE ANYONE, CUSTOM RULES, SPECTATORS &amp; SOS BACKUP</span>
               </button>
             </div>
           </div>

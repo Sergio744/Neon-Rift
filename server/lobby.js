@@ -3,6 +3,7 @@ import { RULES, TICK_MS } from '../shared/constants.js';
 import { MAPS, MAP_IDS, mapSize } from '../shared/maps.js';
 import { MODES } from '../shared/modes.js';
 import { POOLS, POOL_IDS, SELECTABLE, WEAPONS } from '../shared/weapons.js';
+import { ArenaHub } from './arena-hub.js';
 import { CoopRoom } from './coop.js';
 import { Room } from './room.js';
 
@@ -130,14 +131,18 @@ export class Lobby {
     const room = client.room;
     if (!room) return;
     room.leave(client);
-    const empty = room instanceof Room ? room.humanCount === 0 : room.count === 0;
+    const empty = room instanceof Room || room instanceof ArenaHub ? room.humanCount === 0 : room.count === 0;
     if (empty) this.rooms.delete(room.code);
   }
 
   createRoom(opts = {}) {
     const cfg = { loadout: opts.loadout === 'full' ? 'full' : 'drops', ...opts };
     cfg.loadout = opts.loadout === 'full' ? 'full' : 'drops';
-    const room = cfg.coop ? new CoopRoom(this.newCode(), cfg) : new Room(this.newCode(), cfg);
+    const room = cfg.arena
+      ? new ArenaHub(this.newCode(), cfg)
+      : cfg.coop
+        ? new CoopRoom(this.newCode(), cfg)
+        : new Room(this.newCode(), cfg);
     this.rooms.set(room.code, room);
     return room;
   }
@@ -157,11 +162,107 @@ export class Lobby {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
         const room = this.createRoom({
-          pub: false, map: msg.map, goal: Number(msg.goal), pool: msg.pool, mode: msg.mode, loadout: msg.loadout,
+          pub: false, map: msg.map, goal: Number(msg.goal), pool: msg.pool, mode: msg.mode,
+          loadout: msg.loadout, timeLimit: msg.timeLimit, rules: msg.rules,
         });
         room.join(client);
         break;
       }
+      case 'arena': {
+        this.leaveRoom(client);
+        client.name = cleanName(msg.name);
+        let hub = null;
+        if (!msg.priv) {
+          for (const r of this.rooms.values()) {
+            if (r instanceof ArenaHub && !r.priv && !r.full) {
+              hub = r;
+              break;
+            }
+          }
+        }
+        if (!hub) {
+          hub = this.createRoom({
+            arena: true,
+            map: msg.map || 'neon',
+            loadout: msg.loadout || 'drops',
+            autoAi: msg.autoAi !== false,
+            initialAis: Number.isInteger(msg.initialAis) ? Math.max(0, Math.min(6, msg.initialAis)) : 3,
+          });
+          hub.priv = Boolean(msg.priv);
+        }
+        hub.join(client);
+        break;
+      }
+      case 'arena_add_ai':
+        if (client.room instanceof ArenaHub) client.room.spawnAiCitizen(msg.callsign);
+        break;
+      case 'arena_rm_ai':
+        if (client.room instanceof ArenaHub) client.room.removeAiCitizen(msg.id);
+        break;
+      case 'challenge':
+        if (client.room instanceof ArenaHub) {
+          const actor = client.room.actorForClient(client);
+          client.room.proposeChallenge(actor, {
+            targetId: msg.targetId,
+            allies0: msg.allies0,
+            allies1: msg.allies1,
+            map: msg.map,
+            goal: msg.goal,
+            timeLimit: msg.timeLimit,
+            rules: msg.rules,
+          });
+        }
+        break;
+      case 'challenge_reply':
+        if (client.room instanceof ArenaHub) {
+          const actor = client.room.actorForClient(client);
+          client.room.replyChallenge(actor, Boolean(msg.accept));
+        }
+        break;
+      case 'sos':
+        if (client.room instanceof ArenaHub) {
+          const actor = client.room.actorForClient(client);
+          client.room.triggerSos(actor);
+        }
+        break;
+      case 'sos_reply':
+        if (client.room instanceof ArenaHub) {
+          const actor = client.room.actorForClient(client);
+          client.room.answerSos(actor, Boolean(msg.accept));
+        }
+        break;
+      case 'observe':
+        if (client.room instanceof ArenaHub) {
+          this.send(client, client.room.observeFor(client));
+        } else if (client.room instanceof Room) {
+          const r = client.room;
+          const g = r.game;
+          this.send(client, {
+            t: 'obs',
+            code: r.code,
+            me: { slot: client.slot, team: r.teams[client.slot] },
+            state: r.state,
+            map: r.mapId,
+            tick: g.tick,
+            goal: r.goal,
+            timeLimit: r.timeLimit,
+            matchTimer: Math.round(r.matchTimer * 10) / 10,
+            rules: r.activeRules,
+            scores: r.scores,
+            teamScores: r.teamScores,
+            fighters: Array.from({ length: r.max }, (_, s) => {
+              if (!r.hasSlot(s) || !g.present[s]) return null;
+              const p = g.players[s];
+              return {
+                slot: s, name: r.slotName(s), team: r.teams[s],
+                x: Math.round(p.x), y: Math.round(p.y), vx: Math.round(p.vx), vy: Math.round(p.vy),
+                hp: Math.round(p.hp), dead: p.dead, w: p.w, owned: p.owned, ammo: p.ammo,
+              };
+            }),
+            items: g.items.map((it) => ({ kind: it.kind, x: Math.round(it.x), y: Math.round(it.y) })),
+          });
+        }
+        break;
       case 'coop': {
         this.leaveRoom(client);
         client.name = cleanName(msg.name);
@@ -174,7 +275,8 @@ export class Lobby {
       case 'setopts':
         if (client.room) {
           client.room.setOpts?.(client, {
-            pool: msg.pool, goal: msg.goal, mode: msg.mode, map: msg.map, loadout: msg.loadout,
+            pool: msg.pool, goal: msg.goal, mode: msg.mode, map: msg.map,
+            loadout: msg.loadout, timeLimit: msg.timeLimit, rules: msg.rules,
           });
         }
         break;
@@ -207,11 +309,15 @@ export class Lobby {
         if (++client.chatCount > 6) break;
         const text = cleanChat(msg.text);
         if (!text) break;
-        const isTeams = room instanceof Room && room.mode === 'teams';
-        const scope = msg.scope === 'team' && (isTeams || room instanceof CoopRoom) ? 'team' : 'all';
-        const team = isTeams ? room.teams[client.slot] : -1;
-        const payload = { t: 'chat', slot: client.slot, name: client.name, text, scope, team };
-        if (scope === 'team' && isTeams && team >= 0) room.broadcastTeam(team, payload);
+        const isRoomTeams = room instanceof Room && room.mode === 'teams';
+        const arenaActor = room instanceof ArenaHub ? room.actorForClient(client) : null;
+        const isArenaTeams = Boolean(arenaActor && arenaActor.team >= 0 && room.state !== 'idle');
+        const canTeam = isRoomTeams || isArenaTeams || room instanceof CoopRoom;
+        const scope = msg.scope === 'team' && canTeam ? 'team' : 'all';
+        const team = isRoomTeams ? room.teams[client.slot] : isArenaTeams ? arenaActor.team : -1;
+        const slot = client.slot >= 0 ? client.slot : 0;
+        const payload = { t: 'chat', slot, name: client.name, text, scope, team };
+        if (scope === 'team' && (isRoomTeams || isArenaTeams) && team >= 0) room.broadcastTeam(team, payload);
         else room.broadcast(payload);
         break;
       }

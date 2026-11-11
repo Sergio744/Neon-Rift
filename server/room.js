@@ -2,7 +2,8 @@ import { DT, RULES, SNAP_EVERY } from '../shared/constants.js';
 import { MAPS } from '../shared/maps.js';
 import { MODES } from '../shared/modes.js';
 import { mulberry32, randomSeed } from '../shared/rng.js';
-import { FULL_POOL, poolStart, sanitizePool } from '../shared/weapons.js';
+import { enforceRulesOnInput, hasAnyRule, sanitizeRules, sanitizeTimeLimit } from '../shared/rules.js';
+import { FULL_POOL, W, poolStart, sanitizePool } from '../shared/weapons.js';
 import { BOT_CALLSIGNS, cleanSkill, createArenaBot, stepArenaBot } from './arena-bot.js';
 import { Game } from './game.js';
 import { processInputs, queueInputs, resetInputs, send, sendSnapshot } from './inputs.js';
@@ -15,7 +16,7 @@ const SPAWN_STEP = 48; // max ground height difference for that side-step
 //   Private duels can also upgrade live to 'teams' (8 slots) while keeping the same invite code!
 // - 'ffa' / 'teams': group rooms of up to MODES[mode].max slots (humans + NPC bots).
 export class Room {
-  constructor(code, { pub = false, map, goal, pool = FULL_POOL, mode = 'duel', loadout = 'full' } = {}) {
+  constructor(code, { pub = false, map, goal, pool = FULL_POOL, mode = 'duel', loadout = 'full', timeLimit = 0, rules = {} } = {}) {
     this.code = code;
     this.pub = pub;
     this.mode = MODES[mode] ? mode : 'duel';
@@ -24,6 +25,12 @@ export class Room {
     this.mapId = MAPS[map] ? map : this.group ? 'canyon' : 'neon';
     this.goal = MODES[this.mode].goals.includes(goal) ? goal : MODES[this.mode].goal;
     this.loadout = loadout === 'drops' ? 'drops' : 'full';
+    this.timeLimit = sanitizeTimeLimit(timeLimit, 0);
+    this.matchTimer = 0;
+    this.suddenDeath = false;
+    this.activeRules = sanitizeRules(rules);
+    this.foulCd = new Array(this.max).fill(0);
+    this.foulCounts = new Array(this.max).fill(0);
     this.clients = new Array(this.max).fill(null);
     this.bots = new Array(this.max).fill(null);
     this.botSkill = 'veteran';
@@ -80,9 +87,9 @@ export class Room {
   applyPool() {
     const g = this.game;
     const drops = this.loadout === 'drops';
-    g.pool = this.pool;
-    g.riftDrops = drops;
-    g.startOwned = drops ? poolStart(this.pool) : this.pool;
+    g.pool = this.activeRules?.pistolOnly ? 1 << W.pistol : this.pool;
+    g.riftDrops = drops && !this.activeRules?.pistolOnly && !this.activeRules?.noOrbs;
+    g.startOwned = this.activeRules?.pistolOnly ? 1 << W.pistol : drops ? poolStart(this.pool) : this.pool;
     g.baseOwned = g.startOwned;
   }
 
@@ -128,6 +135,10 @@ export class Room {
       bots: this.bots.map((b) => (b ? b.skill : null)),
       botSkill: this.botSkill,
       orders: this.bots.map((b) => (b ? b.order : null)),
+      timeLimit: this.timeLimit,
+      matchTimer: Math.max(0, Math.ceil(this.matchTimer)),
+      suddenDeath: this.suddenDeath,
+      rules: this.activeRules,
       winner: this.winner, rematch: this.rematch, map: this.mapId, pub: this.pub, pool: this.pool, loadout: this.loadout,
     };
   }
@@ -140,12 +151,13 @@ export class Room {
   applyRules() {
     const g = this.game;
     const drops = this.loadout === 'drops';
+    const noOrbs = Boolean(this.activeRules?.noOrbs || this.activeRules?.pistolOnly);
     g.allowFire = this.state !== 'countdown';
     g.scoring = this.state === 'playing';
-    g.cratesOn = this.state === 'playing';
-    g.riftDrops = drops;
+    g.cratesOn = this.state === 'playing' && !noOrbs;
+    g.riftDrops = drops && !noOrbs;
     g.armoryOn = false;
-    g.infiniteAmmo = !drops || this.state === 'waiting';
+    g.infiniteAmmo = !drops || this.state === 'waiting' || Boolean(this.activeRules?.pistolOnly);
   }
 
   isHost(client) {
@@ -285,6 +297,8 @@ export class Room {
     this.scores = new Array(nextMax).fill(0);
     this.deaths = new Array(nextMax).fill(0);
     this.rematch = new Array(nextMax).fill(false);
+    this.foulCd = new Array(nextMax).fill(0);
+    this.foulCounts = new Array(nextMax).fill(0);
 
     for (let s = 0; s < oldClients.length; s++) {
       if (oldClients[s]) this.clients[s] = oldClients[s];
@@ -504,6 +518,8 @@ export class Room {
   toWaiting() {
     this.state = 'waiting';
     this.timer = 0;
+    this.matchTimer = 0;
+    this.suddenDeath = false;
     this.resetScores();
     this.applyRules();
   }
@@ -513,6 +529,9 @@ export class Room {
     this.deaths.fill(0);
     this.teamScores = [0, 0];
     this.winner = -1;
+    this.suddenDeath = false;
+    this.foulCd.fill(0);
+    this.foulCounts.fill(0);
     for (let s = 0; s < this.max; s++) this.rematch[s] = Boolean(this.bots[s]);
   }
 
@@ -579,6 +598,8 @@ export class Room {
   startMatch() {
     this.state = 'countdown';
     this.timer = RULES.COUNTDOWN;
+    this.matchTimer = this.timeLimit;
+    this.suddenDeath = false;
     this.applyPool();
     this.applyRules();
     this.game.reset(this.mapId, randomSeed());
@@ -610,17 +631,17 @@ export class Room {
     if (this.mode === 'duel') {
       const point = kill ? by : 1 - victim;
       this.scores[point]++;
-      if (this.scores[point] >= this.goal) win = point;
+      if (this.scores[point] >= this.goal || (this.suddenDeath && this.scores[0] !== this.scores[1])) win = point;
     } else if (this.mode === 'ffa') {
       // A suicide or a death to the world costs a point, never below zero.
       if (kill) this.scores[by]++;
       else this.scores[victim] = Math.max(0, this.scores[victim] - 1);
-      if (kill && this.scores[by] >= this.goal) win = by;
+      if (kill && (this.scores[by] >= this.goal || this.suddenDeath)) win = by;
     } else {
       if (kill) this.scores[by]++;
       const t = kill ? this.teams[by] : 1 - this.teams[victim];
       this.teamScores[t]++;
-      if (this.teamScores[t] >= this.goal) win = t;
+      if (this.teamScores[t] >= this.goal || (this.suddenDeath && this.teamScores[0] !== this.teamScores[1])) win = t;
     }
     if (win >= 0) {
       this.state = 'over';
@@ -666,10 +687,12 @@ export class Room {
   }
 
   // `pool`, `loadout` and `goal` any room; `mode` (FFA <-> TEAMS) in group rooms. Host only in group rooms.
-  setOpts(client, { pool, goal, mode, loadout } = {}) {
+  setOpts(client, { pool, goal, mode, loadout, timeLimit, rules } = {}) {
     if (this.state === 'countdown' || this.state === 'playing' || !this.isHost(client)) return;
+    if (timeLimit !== undefined) this.timeLimit = sanitizeTimeLimit(timeLimit, this.timeLimit);
+    if (rules !== undefined && typeof rules === 'object') this.activeRules = sanitizeRules(rules);
     if (loadout === 'drops' || loadout === 'full') this.loadout = loadout;
-    if (pool !== undefined || loadout === 'drops' || loadout === 'full') {
+    if (pool !== undefined || loadout === 'drops' || loadout === 'full' || rules !== undefined) {
       if (pool !== undefined) this.pool = sanitizePool(pool, this.pool);
       this.applyPool();
       this.applyRules();
@@ -715,14 +738,89 @@ export class Room {
     queueInputs(client, list);
   }
 
+  handleFoul(slot, foul) {
+    if (!foul || this.state !== 'playing' || (this.foulCd[slot] ?? 0) > 0) return;
+    this.foulCd[slot] = 1.4;
+    this.foulCounts[slot] = (this.foulCounts[slot] || 0) + 1;
+    const p = this.game.players[slot];
+    if (p && !p.dead) p.hp = Math.max(5, p.hp - 12);
+    let pointPenalty = false;
+    if (this.foulCounts[slot] % 3 === 0) {
+      pointPenalty = true;
+      if (this.mode === 'teams' && this.teams[slot] >= 0) {
+        this.teamScores[this.teams[slot]] = Math.max(0, this.teamScores[this.teams[slot]] - 1);
+      } else {
+        this.scores[slot] = Math.max(0, this.scores[slot] - 1);
+      }
+      this.broadcast(this.info());
+    }
+    this.broadcast({
+      t: 'foul',
+      slot,
+      name: this.slotName(slot) || `P${slot + 1}`,
+      rule: foul,
+      count: this.foulCounts[slot],
+      pointPenalty,
+    });
+  }
+
+  resolveTimeUp() {
+    if (this.mode === 'teams') {
+      if (this.teamScores[0] !== this.teamScores[1]) {
+        this.state = 'over';
+        this.winner = this.teamScores[0] > this.teamScores[1] ? 0 : 1;
+      } else {
+        this.suddenDeath = true;
+      }
+    } else {
+      let best = -1;
+      let bestSc = -1;
+      let tie = false;
+      for (let s = 0; s < this.max; s++) {
+        if (!this.hasSlot(s)) continue;
+        if (this.scores[s] > bestSc) {
+          bestSc = this.scores[s];
+          best = s;
+          tie = false;
+        } else if (this.scores[s] === bestSc) {
+          tie = true;
+        }
+      }
+      if (!tie && best >= 0) {
+        this.state = 'over';
+        this.winner = best;
+      } else {
+        this.suddenDeath = true;
+      }
+    }
+    if (this.state === 'over') {
+      for (let s = 0; s < this.max; s++) if (this.bots[s]) this.rematch[s] = true;
+      this.applyRules();
+    }
+    this.broadcast(this.info());
+  }
+
   tick() {
+    const enforce = this.state === 'playing' && hasAnyRule(this.activeRules);
+    for (let s = 0; s < this.max; s++) {
+      if (this.foulCd[s] > 0) this.foulCd[s] = Math.max(0, this.foulCd[s] - DT);
+    }
     processInputs(
       this.clients.map((c, s) => (this.parked[s] ? null : c)),
-      (s, inp) => this.game.applyInput(s, inp),
+      (s, rawInp) => {
+        if (enforce) {
+          const { inp, foul } = enforceRulesOnInput(this.activeRules, this.game.players[s], rawInp);
+          if (foul) this.handleFoul(s, foul);
+          this.game.applyInput(s, inp);
+        } else {
+          this.game.applyInput(s, rawInp);
+        }
+      },
     );
     for (let s = 0; s < this.max; s++) {
       if (this.bots[s] && this.game.present[s]) {
-        const inp = stepArenaBot(this, s, this.bots[s], this.rng);
+        const rawInp = stepArenaBot(this, s, this.bots[s], this.rng);
+        const inp = enforce ? enforceRulesOnInput(this.activeRules, this.game.players[s], rawInp).inp : rawInp;
         this.game.applyInput(s, inp);
       }
     }
@@ -733,6 +831,15 @@ export class Room {
         this.state = 'playing';
         this.timer = 0;
         this.applyRules();
+        this.broadcast(this.info());
+      }
+    } else if (this.state === 'playing' && this.timeLimit > 0 && !this.suddenDeath) {
+      const prevSec = Math.ceil(this.matchTimer);
+      this.matchTimer = Math.max(0, this.matchTimer - DT);
+      const nextSec = Math.ceil(this.matchTimer);
+      if (this.matchTimer <= 0) {
+        this.resolveTimeUp();
+      } else if (nextSec !== prevSec && (nextSec <= 10 || nextSec % 5 === 0)) {
         this.broadcast(this.info());
       }
     }
