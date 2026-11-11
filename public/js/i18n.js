@@ -110,6 +110,11 @@ export const STRINGS = {
     buffOverdrive: 'OVERDRIVE',
     buffShield: 'ENERGY SHIELD',
     buffFrenzy: 'AMMO FRENZY',
+    hudPause: 'PAUSE',
+    hudMenu: 'MAIN MENU',
+    soloPaused: 'THE GAME IS PAUSED',
+    coopPaused: 'THE RUN KEEPS GOING',
+    matchPaused: 'THE MATCH KEEPS RUNNING',
   },
   fr: {
     tagline: 'SHOOTER STICKMAN COMMUNAUTAIRE SUR CARTES DESTRUCTIBLES',
@@ -218,6 +223,11 @@ export const STRINGS = {
     buffOverdrive: 'SURPUISSANCE',
     buffShield: 'BOUCLIER',
     buffFrenzy: 'FRÉNÉSIE',
+    hudPause: 'PAUSE',
+    hudMenu: 'MENU PRINCIPAL',
+    soloPaused: 'LA PARTIE EST EN PAUSE',
+    coopPaused: 'LA SURVIE CONTINUE EN DIRECT',
+    matchPaused: 'LE MATCH CONTINUE EN DIRECT',
   },
 };
 

@@ -402,3 +402,25 @@ test('Rift Boost Orbs grant temporary Turbo, Overdrive, Shield and Frenzy buffs 
   }
   assert.equal(p0.buff, BUFF.NONE, 'Frenzy expired after duration');
 });
+
+test('in-game HUD serves dedicated Pause and Main Menu buttons with EN/FR translations', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  try {
+    const res = await fetch(`http://127.0.0.1:${srv.port}/`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('id="btn-hud-pause"'), 'Pause button exists in HUD');
+    assert.ok(html.includes('id="btn-hud-menu"'), 'Main Menu button exists in HUD');
+    assert.ok(html.includes('data-i18n="hudPause"'));
+    assert.ok(html.includes('data-i18n="hudMenu"'));
+
+    const i18nRes = await fetch(`http://127.0.0.1:${srv.port}/js/i18n.js`);
+    assert.equal(i18nRes.status, 200);
+    const i18nSrc = await i18nRes.text();
+    assert.ok(i18nSrc.includes("hudMenu: 'MAIN MENU'"));
+    assert.ok(i18nSrc.includes("hudMenu: 'MENU PRINCIPAL'"));
+  } finally {
+    await srv.close();
+  }
+});
+

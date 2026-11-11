@@ -307,9 +307,9 @@ function enterSurvival(m) {
   show(ui.wavebar, true);
   show($('#btn-copy2'), m === 'coop');
   show($('#so-best-row'), m === 'solo');
-  $('#pause-note').textContent = m === 'solo' ? 'THE GAME IS PAUSED' : 'THE RUN KEEPS GOING';
-  $('#btn-leave').textContent = 'QUIT TO MENU';
-  $('#btn-retry').textContent = m === 'solo' ? 'TRY AGAIN' : 'PLAY AGAIN';
+  $('#pause-note').textContent = tr(m === 'solo' ? 'soloPaused' : 'coopPaused');
+  $('#btn-leave').textContent = tr('quitMenu');
+  $('#btn-retry').textContent = tr(m === 'solo' ? 'tryAgain' : 'playAgain');
   ui.killfeed.textContent = '';
   input.enabled = true;
   input.releaseAll();
@@ -658,7 +658,7 @@ function toMenu({ keepParked = false } = {}) {
   show(ui.wavebar, false);
   show($('#btn-copy2'), true);
   show($('#btn-park2'), false);
-  $('#pause-note').textContent = 'THE MATCH KEEPS RUNNING';
+  $('#pause-note').textContent = tr('matchPaused');
   $('#btn-leave').textContent = tr('leaveMatch');
   center('', '', false);
   show(ui.hud, false);
@@ -671,7 +671,22 @@ function toMenu({ keepParked = false } = {}) {
   renderParkedBar();
 }
 
-$('#btn-resume').addEventListener('click', () => setPaused(false));
+$('#btn-resume').addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  setPaused(false);
+});
+$('#btn-hud-pause')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  sfx.unlock();
+  if (!game.active) return;
+  if (!ui.over.classList.contains('hidden') || !ui.soloOver.classList.contains('hidden')) return;
+  setPaused(ui.pause.classList.contains('hidden'));
+});
+$('#btn-hud-menu')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  sfx.unlock();
+  leave();
+});
 $('#btn-copy2').addEventListener('click', copyInvite);
 $('#btn-park2').addEventListener('click', parkCurrentRoom);
 $('#btn-mute').addEventListener('click', () => {
@@ -961,6 +976,14 @@ $('#btn-lang')?.addEventListener('click', toggleLang);
 onLangChange(() => {
   ui.conn.textContent = net.open ? tr('connected') : tr('connecting');
   renderBest();
+  if (mode === 'solo' || mode === 'coop') {
+    $('#pause-note').textContent = tr(mode === 'solo' ? 'soloPaused' : 'coopPaused');
+    $('#btn-leave').textContent = tr('quitMenu');
+    $('#btn-retry').textContent = tr(mode === 'solo' ? 'tryAgain' : 'playAgain');
+  } else {
+    $('#pause-note').textContent = tr('matchPaused');
+    $('#btn-leave').textContent = tr('leaveMatch');
+  }
   if (!ui.coopWait.classList.contains('hidden')) renderSurvivalLobby();
   if (!ui.soloOver.classList.contains('hidden')) renderSurvivalOverMaps();
 });

@@ -985,7 +985,7 @@ body {
 #help {
   position: absolute;
   left: calc(var(--u) * 6);
-  top: calc(var(--u) * 6);
+  top: calc(var(--u) * 24);
   background: rgba(14, 11, 28, 0.78);
   border: calc(var(--u) * 1) solid rgba(255, 255, 255, 0.08);
   padding: calc(var(--u) * 5) calc(var(--u) * 6);
@@ -1631,6 +1631,7 @@ input:focus {
 }
 
 #parked-bar.compact {
+  top: 46px;
   left: 12px;
   transform: none;
 }
@@ -1693,6 +1694,82 @@ input:focus {
 #hotbar .slot .a.frenzy {
   color: #ffd23f;
 }
+
+#hud-actions {
+  position: absolute;
+  top: calc(var(--u) * 6);
+  left: calc(var(--u) * 6);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  pointer-events: auto;
+}
+
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 3);
+  padding: calc(var(--u) * 3) calc(var(--u) * 5.5);
+  background: rgba(14, 11, 28, 0.86);
+  border: calc(var(--u) * 1) solid var(--line);
+  color: var(--ink);
+  font: inherit;
+  font-size: calc(var(--u) * 5.5);
+  letter-spacing: calc(var(--u) * 0.5);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.hud-btn:hover {
+  border-color: var(--accent);
+  background: rgba(62, 230, 255, 0.14);
+  color: #ffffff;
+}
+
+.hud-btn.menu-btn:hover {
+  border-color: var(--p1);
+  background: rgba(255, 77, 157, 0.16);
+}
+
+.hud-btn:active {
+  transform: translateY(calc(var(--u) * 0.8));
+}
+
+.hb-pause {
+  display: inline-flex;
+  gap: calc(var(--u) * 1.5);
+  width: calc(var(--u) * 5.5);
+  height: calc(var(--u) * 6);
+}
+
+.hb-pause::before,
+.hb-pause::after {
+  content: '';
+  flex: 1;
+  background: var(--accent);
+}
+
+.hb-menu {
+  position: relative;
+  display: inline-block;
+  width: calc(var(--u) * 6);
+  height: calc(var(--u) * 5.5);
+  border-top: calc(var(--u) * 1.3) solid var(--p1);
+  border-bottom: calc(var(--u) * 1.3) solid var(--p1);
+}
+
+.hb-menu::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: calc(var(--u) * 1.3);
+  transform: translateY(-50%);
+  background: var(--p1);
+}
+
 
 
 
