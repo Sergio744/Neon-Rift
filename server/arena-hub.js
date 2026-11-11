@@ -74,7 +74,7 @@ export class ArenaHub {
     this.pendingChallenge = null; // { id, fromId, targetId, allies0: [], allies1: [], map, goal, timeLimit, rules, expiresAt }
     this.activeSos = null; // { id, callerId, callerName, team, expiresAt, decided: Set<actorId> }
     this.socialAcc = 0;
-    this.idleChallengeCd = 6.5;
+    this.idleChallengeCd = 26;
 
     this.game = new Game(this.mapId, randomSeed(), MAX_FIGHTERS);
     this.game.onKill = (v, by) => this.onKill(v, by);
@@ -445,7 +445,15 @@ export class ArenaHub {
 
   proposeChallenge(fromActor, { targetId, allies0 = [], allies1 = [], map, goal, timeLimit, rules } = {}) {
     if (!fromActor || this.state === 'countdown' || this.state === 'playing') return false;
-    if (this.pendingChallenge) return false;
+    if (this.pendingChallenge) {
+      const prevSender = this.actors.get(this.pendingChallenge.fromId);
+      // Human-initiated challenges always supersede an unsolicited AI challenge!
+      if (fromActor.kind === 'human' && prevSender?.kind === 'ai') {
+        this.pendingChallenge = null;
+      } else {
+        return false;
+      }
+    }
     const target = this.actors.get(String(targetId || ''));
     if (!target || target.id === fromActor.id) return false;
 
@@ -788,6 +796,7 @@ export class ArenaHub {
   // and `stopAiMatch` lets any human stop a pure AI-vs-AI match at any moment to take back the ring!
   startAiExhibition({ ai0, ai1, map, goal, timeLimit, rules } = {}) {
     if (this.state === 'countdown' || this.state === 'playing') return false;
+    this.pendingChallenge = null;
     let ais = this.aiActors;
     while (ais.length < 2 && this.actors.size < MAX_ACTORS) {
       this.spawnAiCitizen();

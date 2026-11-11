@@ -229,10 +229,10 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
       if (!rosterIds.has(id) || id === myActorId) myAllies.delete(id);
     }
 
-    // Roster list with Challenge & Squad-Ally controls
+    // Roster list with Challenge & Squad-Ally controls (always keep challenge buttons visible for humans in idle!)
     const rosterEl = $('#arena-roster');
     rosterEl.textContent = '';
-    const canChallenge = msg.st === 'idle' && !msg.challenge;
+    const canChallenge = msg.st === 'idle' && (!msg.challenge || msg.challenge.fromId !== myActorId);
 
     for (const actor of msg.roster) {
       const isMe = actor.id === myActorId;
@@ -281,11 +281,16 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
           focusCanvas();
         });
         row.append(allyBtn, chBtn);
-      } else if (actor.kind === 'ai' && canChallenge) {
-        const rm = el('button', 'pl-act rm', '×');
-        rm.type = 'button';
-        rm.addEventListener('click', () => net.send({ t: 'arena_rm_ai', id: actor.id }));
-        row.appendChild(rm);
+        if (actor.kind === 'ai') {
+          const rm = el('button', 'pl-act rm', '×');
+          rm.type = 'button';
+          rm.addEventListener('click', (e) => {
+            e.currentTarget.blur();
+            net.send({ t: 'arena_rm_ai', id: actor.id });
+            focusCanvas();
+          });
+          row.appendChild(rm);
+        }
       }
       rosterEl.appendChild(row);
     }

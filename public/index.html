@@ -11,7 +11,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/style.css?v=6" />
+    <script type="importmap">
+      {
+        "imports": {
+          "/js/main.js": "/js/main.js?v=6",
+          "/js/i18n.js": "/js/i18n.js?v=6",
+          "/js/comms.js": "/js/comms.js?v=6",
+          "/js/game.js": "/js/game.js?v=6",
+          "/js/input.js": "/js/input.js?v=6",
+          "/js/ui/arena.js": "/js/ui/arena.js?v=6",
+          "/js/ui/room.js": "/js/ui/room.js?v=6",
+          "/js/ui/controls.js": "/js/ui/controls.js?v=6",
+          "/js/ui/hud.js": "/js/ui/hud.js?v=6",
+          "/shared/rules.js": "/shared/rules.js?v=6"
+        }
+      }
+    </script>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23120d29'/%3E%3Crect x='2' y='1' width='2' height='14' fill='%23ff4d9d' opacity='0.45'/%3E%3Crect x='6' y='2' width='4' height='4' fill='%233ee6ff'/%3E%3Crect x='7' y='6' width='2' height='5' fill='%233ee6ff'/%3E%3Crect x='5' y='11' width='2' height='3' fill='%233ee6ff'/%3E%3Crect x='9' y='11' width='2' height='3' fill='%233ee6ff'/%3E%3Crect x='9' y='7' width='5' height='2' fill='%23ff4d9d'/%3E%3C/svg%3E"
@@ -52,16 +68,16 @@
         </div>
         <div id="holo-cams" class="hidden"></div>
         <div id="active-rules-bar" class="hidden"></div>
-        <div id="challenge-alert" class="arena-alert hidden"></div>
-        <div id="sos-alert" class="arena-alert sos hidden"></div>
-        <div id="spec-bar" class="spec-bar hidden">
+        <div id="challenge-alert" class="arena-alert hidden" style="pointer-events:auto"></div>
+        <div id="sos-alert" class="arena-alert sos hidden" style="pointer-events:auto"></div>
+        <div id="spec-bar" class="spec-bar hidden" style="pointer-events:auto">
           <span class="spec-tag" data-i18n="spectatingLabel">SPECTATING</span>
           <button class="btn small" id="btn-spec-prev" type="button">◄</button>
           <b id="spec-target-name">AUTO CAM</b>
           <button class="btn small" id="btn-spec-next" type="button">►</button>
           <button class="btn small primary hidden" id="btn-spec-stop" type="button" data-i18n="stopAiBtn">⏹ STOP &amp; PLAY</button>
         </div>
-        <div id="arena-box" class="waitbox arena-box hidden">
+        <div id="arena-box" class="waitbox arena-box hidden" style="pointer-events:auto">
           <div class="w-head">
             <div class="w-title" data-i18n="arenaHubTitle">RIFT COLOSSEUM</div>
             <b class="w-count" id="arena-count">0/12</b>
@@ -336,6 +352,6 @@
       <div id="toast"></div>
     </div>
 
-    <script type="module" src="/js/main.js"></script>
+    <script type="module" src="/js/main.js?v=6"></script>
   </body>
 </html>

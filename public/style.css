@@ -2131,18 +2131,20 @@ input:focus {
 }
 
 #arena-box.arena-box {
-  top: calc(var(--u) * 36);
+  top: calc(var(--u) * 34);
   right: calc(var(--u) * 6);
   left: auto;
   transform: none;
-  width: calc(var(--u) * 244);
+  width: calc(var(--u) * 282);
   max-width: calc(100% - var(--u) * 12);
-  max-height: calc(100% - var(--u) * 86);
-  padding: calc(var(--u) * 6) calc(var(--u) * 8);
-  gap: calc(var(--u) * 4);
+  max-height: calc(100% - var(--u) * 78);
+  padding: calc(var(--u) * 5.5) calc(var(--u) * 7);
+  gap: calc(var(--u) * 3.5);
   align-items: stretch;
   overflow-y: auto;
-  z-index: 8;
+  pointer-events: auto;
+  cursor: default;
+  z-index: 12;
   box-shadow: 0 calc(var(--u) * 4) calc(var(--u) * 16) rgba(0, 0, 0, 0.65);
 }
 
@@ -2166,6 +2168,16 @@ input:focus {
 
 #arena-box .w-code b {
   font-size: calc(var(--u) * 11);
+}
+
+#arena-box .w-code .btn.small {
+  font-size: calc(var(--u) * 4.6);
+  padding: calc(var(--u) * 2) calc(var(--u) * 3.8);
+}
+
+#arena-box .ar-row .btn.small {
+  font-size: calc(var(--u) * 4.5);
+  padding: calc(var(--u) * 1.8) calc(var(--u) * 3);
 }
 
 #arena-box .ar-actions {
