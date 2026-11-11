@@ -199,6 +199,21 @@ export class Lobby {
       case 'arena_rm_ai':
         if (client.room instanceof ArenaHub) client.room.removeAiCitizen(msg.id);
         break;
+      case 'arena_ai_duel':
+        if (client.room instanceof ArenaHub) {
+          client.room.startAiExhibition({
+            ai0: msg.ai0,
+            ai1: msg.ai1,
+            map: msg.map,
+            goal: msg.goal,
+            timeLimit: msg.timeLimit,
+            rules: msg.rules,
+          });
+        }
+        break;
+      case 'arena_stop':
+        if (client.room instanceof ArenaHub) client.room.stopAiMatch();
+        break;
       case 'challenge':
         if (client.room instanceof ArenaHub) {
           const actor = client.room.actorForClient(client);

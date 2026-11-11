@@ -340,7 +340,7 @@ export class ArenaHub {
     }
   }
 
-  broadcastChat(actor, text, scope = 'all') {
+  broadcastChat(actor, text, scope = 'all', chatKey = '', chatVars = null) {
     const payload = {
       t: 'chat',
       slot: actor.slot >= 0 ? actor.slot : 0,
@@ -350,6 +350,8 @@ export class ArenaHub {
       team: actor.team,
       bot: actor.kind === 'ai',
     };
+    if (chatKey) payload.chatKey = chatKey;
+    if (chatVars) payload.chatVars = chatVars;
     if (scope === 'team' && actor.team >= 0) this.broadcastTeam(actor.team, payload);
     else this.broadcast(payload);
   }
@@ -485,7 +487,9 @@ export class ArenaHub {
     if (!ch || !actor) return false;
     if (actor.id !== ch.targetId && actor.id !== ch.fromId) return false;
     if (!accept || actor.id === ch.fromId) {
-      if (actor.id === ch.targetId) this.broadcastChat(actor, 'CHALLENGE DECLINED.');
+      if (actor.id === ch.targetId) {
+        this.broadcastChat(actor, 'CHALLENGE DECLINED.', 'all', 'aiChatDecline');
+      }
       this.pendingChallenge = null;
       this.idleChallengeCd = 6;
       this.broadcast(this.info());
@@ -612,7 +616,7 @@ export class ArenaHub {
       ttl: 14,
       decided: new Set([callerActor.id]),
     };
-    this.broadcastChat(callerActor, 'SOS! NEED BACKUP IN THE ARENA!', 'all');
+    this.broadcastChat(callerActor, 'SOS! NEED BACKUP IN THE ARENA!', 'all', 'aiChatSos');
     this.broadcast(this.info());
     return true;
   }
@@ -626,7 +630,7 @@ export class ArenaHub {
 
     if (!accept) {
       if (helperActor.kind === 'ai' && this.rng() < 0.45) {
-        this.broadcastChat(helperActor, 'HANDLE THIS DUEL YOURSELF!');
+        this.broadcastChat(helperActor, 'HANDLE THIS DUEL YOURSELF!', 'all', 'aiChatNoSos');
       }
       return true;
     }
@@ -660,7 +664,9 @@ export class ArenaHub {
     // Clear SOS once a reinforcement arrives (caller or opponent can call again later!)
     const callerName = sos.callerName;
     this.activeSos = null;
-    this.broadcastChat(helperActor, `JUMPING IN TO HELP ${callerName}!`, 'all');
+    this.broadcastChat(helperActor, `JUMPING IN TO HELP ${callerName}!`, 'all', 'aiChatJoinSos', {
+      caller: callerName,
+    });
     this.broadcast({
       t: 'sos_joined',
       helperName: helperActor.name,
@@ -778,6 +784,41 @@ export class ArenaHub {
     this.broadcastMedia();
   }
 
+  // Launches an explicit AI-vs-AI exhibition duel when requested by a human spectator,
+  // and `stopAiMatch` lets any human stop a pure AI-vs-AI match at any moment to take back the ring!
+  startAiExhibition({ ai0, ai1, map, goal, timeLimit, rules } = {}) {
+    if (this.state === 'countdown' || this.state === 'playing') return false;
+    let ais = this.aiActors;
+    while (ais.length < 2 && this.actors.size < MAX_ACTORS) {
+      this.spawnAiCitizen();
+      ais = this.aiActors;
+    }
+    if (ais.length < 2) return false;
+    const f0 = this.actors.get(String(ai0 || '')) || ais[0];
+    const f1 = this.actors.get(String(ai1 || '')) || ais.find((a) => a.id !== f0.id);
+    if (!f0 || !f1 || f0.id === f1.id) return false;
+
+    const pickedMap = MAPS[map] && !MAPS[map].hidden ? map : this.mapId;
+    return this.beginChallenge({
+      fromId: f0.id,
+      targetId: f1.id,
+      allies0: [],
+      allies1: [],
+      map: pickedMap,
+      goal: [3, 5, 10, 15].includes(Number(goal)) ? Number(goal) : 5,
+      timeLimit: sanitizeTimeLimit(timeLimit, 120),
+      rules: sanitizeRules(rules),
+    });
+  }
+
+  stopAiMatch() {
+    if (this.state === 'idle') return false;
+    const anyHumanFighting = this.ring.some((a) => a && a.kind === 'human');
+    if (anyHumanFighting) return false;
+    this.returnToOpenRing();
+    return true;
+  }
+
   // ---------- Autonomous AI Social & Decision Brain (1 Hz) ----------
 
   stepSocialAi(dt) {
@@ -797,7 +838,7 @@ export class ArenaHub {
         if (target?.kind === 'ai') {
           ch.aiWait -= dt;
           if (ch.aiWait <= 0) {
-            this.broadcastChat(target, 'CHALLENGE ACCEPTED! STEP INTO THE RIFT!');
+            this.broadcastChat(target, 'CHALLENGE ACCEPTED! STEP INTO THE RIFT!', 'all', 'aiChatAccept');
             this.replyChallenge(target, true);
           }
         }
@@ -846,23 +887,25 @@ export class ArenaHub {
     }
 
     // 4. Autonomous AI spontaneous challenge creation when the Arena is idle!
+    // Never start an unrequested AI-vs-AI match while humans are in the Open Ring (so humans
+    // are never ejected into Spectator Mode without their consent!). Instead, AIs challenge a human!
     if (this.state === 'idle' && !this.pendingChallenge && this.actors.size >= 2) {
       this.idleChallengeCd -= dt;
       if (this.idleChallengeCd <= 0) {
-        this.idleChallengeCd = 11 + this.rng() * 6;
+        this.idleChallengeCd = 16 + this.rng() * 8;
         const ais = this.aiActors;
         if (ais.length > 0) {
           const challenger = ais[Math.floor(this.rng() * ais.length)];
-          const others = [...this.actors.values()].filter((a) => a.id !== challenger.id);
-          if (others.length > 0) {
-            const target = others[Math.floor(this.rng() * others.length)];
+          const humans = this.humanActors;
+          const candidates = humans.length > 0 ? humans : [...this.actors.values()].filter((a) => a.id !== challenger.id);
+          if (candidates.length > 0) {
+            const target = candidates[Math.floor(this.rng() * candidates.length)];
             const mapPick = MAP_IDS[Math.floor(this.rng() * MAP_IDS.length)];
-            const rules = this.rng() < 0.55 ? { ...(challenger.profile?.favRules || {}) } : {};
-            // Occasionally propose a 2v2 team challenge if >=4 actors are in the Colosseum!
+            const rules = this.rng() < 0.45 ? { ...(challenger.profile?.favRules || {}) } : {};
             let allies0 = [];
             let allies1 = [];
-            const spare = others.filter((a) => a.id !== target.id);
-            if (challenger.trait === 'tactical' && spare.length >= 2 && this.rng() < 0.45) {
+            const spare = [...this.actors.values()].filter((a) => a.id !== challenger.id && a.id !== target.id);
+            if (challenger.trait === 'tactical' && spare.length >= 2 && this.rng() < 0.4) {
               allies0 = [spare[0].id];
               allies1 = [spare[1].id];
             }
@@ -878,9 +921,10 @@ export class ArenaHub {
             if (ok) {
               this.broadcastChat(
                 challenger,
-                allies0.length
-                  ? `${target.name}, 2V2 SQUAD CHALLENGE ON ${MAPS[mapPick].name}!`
-                  : `${target.name}, I CHALLENGE YOU TO A DUEL ON ${MAPS[mapPick].name}!`,
+                `${target.name} — ${MAPS[mapPick].name}!`,
+                'all',
+                'aiChatChallenge',
+                { target: target.name, map: MAPS[mapPick].name },
               );
             }
           }

@@ -19,7 +19,7 @@
   </head>
   <body>
     <div id="stage">
-      <canvas id="view" width="800" height="450"></canvas>
+      <canvas id="view" width="800" height="450" tabindex="-1"></canvas>
 
       <div id="hud" class="hidden">
         <div id="vignette"></div>
@@ -59,6 +59,7 @@
           <button class="btn small" id="btn-spec-prev" type="button">◄</button>
           <b id="spec-target-name">AUTO CAM</b>
           <button class="btn small" id="btn-spec-next" type="button">►</button>
+          <button class="btn small primary hidden" id="btn-spec-stop" type="button" data-i18n="stopAiBtn">⏹ STOP &amp; PLAY</button>
         </div>
         <div id="arena-box" class="waitbox arena-box hidden">
           <div class="w-head">
@@ -69,7 +70,10 @@
           <div class="w-code">
             <span><span data-i18n="roomLabel">ROOM</span> <b id="arena-code">----</b></span>
             <button class="btn small" id="btn-arena-copy" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
+          </div>
+          <div class="ar-actions" id="arena-top-actions">
             <button class="btn small bot-add" id="btn-arena-addai" type="button" data-i18n="addAiCitizen">+ AUTONOMOUS AI</button>
+            <button class="btn small squad-up" id="btn-arena-aiduel" type="button" data-i18n="aiDuelBtn">⚔ AI VS AI DUEL</button>
           </div>
           <div id="arena-roster" class="arena-roster"></div>
           <div id="arena-cfg" class="w-settings">

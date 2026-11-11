@@ -11,6 +11,7 @@ import { PROJ, VORTEX_P } from '../shared/projectiles.js';
 import { Survival } from '../shared/survival.js';
 import { FULL_POOL, PRISM, RIFT_POOL, W, WEAPONS, owns, poolStart, sanitizePool } from '../shared/weapons.js';
 import { startServer } from '../server/index.js';
+import { ArenaHub } from '../server/arena-hub.js';
 import { Room } from '../server/room.js';
 import { launchAutonomousAgent } from '../agents/autonomous-player.mjs';
 
@@ -800,6 +801,115 @@ test('Match Timer resolves winner at 0:00 and triggers Sudden Death on a tie', (
   assert.equal(room.state, 'over');
   assert.equal(room.winner, 0, 'next point in Sudden Death wins immediately');
 });
+
+test('Autonomous AI Citizens fight to completion on open maps (neon) and underground bunker maps (mine + noExplosives)', () => {
+  // 1. Open vertical map: NEON CITY
+  const neonHub = new ArenaHub('AINN', { map: 'neon', initialAis: 2, autoAi: false });
+  assert.equal(neonHub.startAiExhibition({ map: 'neon', goal: 3, timeLimit: 120 }), true);
+  for (let i = 0; i < 60 * 55 && neonHub.state !== 'over'; i++) neonHub.tick();
+  assert.equal(neonHub.state, 'over', 'AI-vs-AI duel on NEON CITY completes decisively');
+  assert.ok(Math.max(...neonHub.teamScores) >= 3, 'winner reached goal of 3 on NEON CITY');
+
+  // 2. Sealed underground bunkers + MAT_METAL shields + SANS EXPLOSIFS rule: THE MINE
+  const mineHub = new ArenaHub('AIMN', { map: 'mine', initialAis: 2, autoAi: false });
+  assert.equal(
+    mineHub.startAiExhibition({ map: 'mine', goal: 2, timeLimit: 120, rules: { noExplosives: true } }),
+    true,
+  );
+  for (let i = 0; i < 60 * 70 && mineHub.state !== 'over'; i++) mineHub.tick();
+  assert.ok(
+    mineHub.teamScores[0] + mineHub.teamScores[1] >= 2,
+    `AIs escaped underground bunkers on THE MINE and scored kills (got ${mineHub.teamScores.join('-')})`,
+  );
+});
+
+test('Colosseum keeps human in active ring (never auto-hijacked by AI-vs-AI) and supports voluntary AI-vs-AI duel + Stop & Play', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const human = mkClient();
+    await human.open;
+
+    human.send({ t: 'arena', name: 'sergio', priv: true, autoAi: true, initialAis: 3 });
+    const joined = await human.wait((m) => m.t === 'joined' && m.mode === 'arena');
+    assert.ok(joined.slot >= 0 && !joined.spectating, 'human spawns directly in the active Open Ring');
+
+    const hub = srv.lobby.rooms.get(joined.code);
+    const humanActor = hub.actors.get(joined.actorId);
+
+    // 1. Even across repeated autonomous social ticks, AIs only challenge the human (withchatKey) and NEVER eject them!
+    for (let k = 0; k < 6; k++) {
+      hub.pendingChallenge = null;
+      hub.idleChallengeCd = 0.01;
+      hub.stepSocialAi(0.2);
+      assert.equal(hub.state, 'idle', 'AIs never start an unrequested match behind the human player');
+      assert.ok(humanActor.slot >= 0, 'human keeps active fighter slot and keyboard control');
+      if (hub.pendingChallenge) {
+        assert.equal(hub.pendingChallenge.targetId, humanActor.id, 'spontaneous AI challenge targets the human');
+      }
+    }
+
+    const aiChat = await human.wait((m) => m.t === 'chat' && m.chatKey === 'aiChatChallenge');
+    assert.ok(aiChat, 'AI challenge chat carries i18n chatKey for FR/EN client translation');
+
+    // 2. Human voluntarily clicks "⚔ AI VS AI DUEL" -> enters Spectator Mode watching 2 AIs fight!
+    hub.pendingChallenge = null;
+    human.msgs.length = 0;
+    human.send({ t: 'arena_ai_duel', map: 'neon', goal: 3, timeLimit: 90, rules: { noExplosives: true } });
+    const specRole = await human.wait((m) => m.t === 'arena_role' && m.spectating === true);
+    assert.equal(specRole.slot, -1);
+    assert.equal(hub.state, 'countdown');
+
+    // 3. Human clicks "⏹ STOP & PLAY" (`arena_stop`) -> AI exhibition stops and human reclaims active fighter slot!
+    human.msgs.length = 0;
+    human.send({ t: 'arena_stop' });
+    const activeRole = await human.wait((m) => m.t === 'arena_role' && m.spectating === false);
+    assert.ok(activeRole.slot >= 0, 'human immediately reclaims an active fighter slot in the ring');
+    assert.equal(hub.state, 'idle');
+
+    // 4. Verify `#arena-box` CSS positioning + FR strings are served properly
+    const [cssRes, htmlRes, i18nRes] = await Promise.all([
+      fetch(`http://127.0.0.1:${srv.port}/style.css`),
+      fetch(`http://127.0.0.1:${srv.port}/`),
+      fetch(`http://127.0.0.1:${srv.port}/js/i18n.js`),
+    ]);
+    const [css, html, i18n] = await Promise.all([cssRes.text(), htmlRes.text(), i18nRes.text()]);
+    assert.ok(css.includes('#arena-box {') || css.includes('#arena-box\n'), '#arena-box inherits waitbox layout');
+    assert.ok(css.includes('#arena-box .chip'), '#arena-box chips use compact HUD sizing');
+    assert.ok(html.includes('id="btn-arena-aiduel"'), 'AI-vs-AI duel button present in HUD');
+    assert.ok(html.includes('id="btn-spec-stop"'), 'Spectator Stop & Play button present in HUD');
+    assert.ok(i18n.includes('REPRENDRE LA MAIN'), 'French translation for Stop & Play present');
+
+    human.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
 
 
 

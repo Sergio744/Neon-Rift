@@ -137,8 +137,13 @@ export function createComms({ game, net, sfx, toast, getContext }) {
     net.send({ t: 'chat', text, scope });
   }
 
-  function appendChatMsg({ slot, name, text, scope, bot }) {
-    bubbles.set(slot, { text, until: performance.now() + BUBBLE_MS });
+  function appendChatMsg({ slot, name, text, scope, bot, chatKey, chatVars }) {
+    const display = chatKey ? tr(chatKey, chatVars || null) : text;
+    const bubbleAscii = String(display || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase();
+    bubbles.set(slot, { text: bubbleAscii, until: performance.now() + BUBBLE_MS });
     if (!els.log) return;
     const row = document.createElement('div');
     row.className = `chat-line${scope === 'team' ? ' team-msg' : ''}${bot ? ' bot-msg' : ''}`;
@@ -151,7 +156,7 @@ export function createComms({ game, net, sfx, toast, getContext }) {
     who.textContent = `${name}: `;
     const body = document.createElement('span');
     body.className = 'chat-txt';
-    body.textContent = text;
+    body.textContent = display;
     row.append(badge, who, body);
     els.log.appendChild(row);
     while (els.log.children.length > LOG_LIMIT) els.log.firstElementChild.remove();

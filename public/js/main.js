@@ -331,6 +331,7 @@ function enterSurvival(m) {
   ui.killfeed.textContent = '';
   input.enabled = true;
   input.releaseAll();
+  canvas.focus({ preventScroll: true });
   hud.reset();
   feel.reset();
   helpOnStart();
@@ -590,6 +591,7 @@ function setPaused(on) {
   show(ui.pause, on);
   input.enabled = !on && ui.over.classList.contains('hidden') && ui.soloOver.classList.contains('hidden');
   if (on) input.releaseAll();
+  else canvas.focus({ preventScroll: true });
   if (solo.active) solo.paused = on;
 }
 
@@ -1017,12 +1019,13 @@ net.on('joined', (msg) => {
   history.replaceState(null, '', `/?room=${msg.code}`);
   inviteCode = null;
   show($('#invite'), false);
-  show(ui.menu, false);
+      show(ui.menu, false);
   show(ui.hud, true);
   show(ui.over, false);
   show(ui.pause, false);
   input.enabled = true;
   input.releaseAll();
+  canvas.focus({ preventScroll: true });
   lastState = '';
   hud.reset();
   feel.reset();
@@ -1044,8 +1047,9 @@ net.on('arena_role', (msg) => {
   game.spectating = Boolean(msg.spectating || msg.slot < 0);
   game.pending = [];
   show($('#bottom'), !game.spectating);
-  input.enabled = !game.spectating && ui.pause.classList.contains('hidden');
-  if (game.spectating) input.releaseAll();
+  input.enabled = ui.pause.classList.contains('hidden');
+  input.releaseAll();
+  if (!game.spectating) canvas.focus({ preventScroll: true });
   if (arenaState) arenaUi.renderHub(arenaState);
   comms.updateHudButtons();
 });

@@ -174,6 +174,15 @@ export const STRINGS = {
     suddenDeath: 'SUDDEN DEATH!',
     foulAlert: 'FOUL',
     openRing: 'OPEN RING - PICK AN OPPONENT',
+    arenaAiCount: 'AI CITIZENS',
+    aiDuelBtn: '⚔ AI VS AI DUEL',
+    stopAiBtn: '⏹ STOP & PLAY',
+    aiChatAccept: 'CHALLENGE ACCEPTED! STEP INTO THE RIFT!',
+    aiChatDecline: 'CHALLENGE DECLINED.',
+    aiChatSos: 'SOS! NEED BACKUP IN THE ARENA!',
+    aiChatNoSos: 'HANDLE THIS DUEL YOURSELF!',
+    aiChatJoinSos: 'JUMPING IN TO HELP {caller}!',
+    aiChatChallenge: '{target}, DUEL ME ON {map}!',
   },
   fr: {
     tagline: 'SHOOTER STICKMAN COMMUNAUTAIRE SUR CARTES DESTRUCTIBLES',
@@ -342,10 +351,20 @@ export const STRINGS = {
     sosJoinBtn: 'AIDER (REJOINDRE)',
     sosIgnoreBtn: 'REFUSER',
     spectatingLabel: 'MODE SPECTATEUR',
+    spectatingLabel: 'SPECTATEUR',
     specAuto: 'CAMÉRA AUTO',
     suddenDeath: 'MORT SUBITE !',
     foulAlert: 'FAUTE',
     openRing: 'ARÈNE LIBRE - LANCE UN DÉFI',
+    arenaAiCount: 'CITOYENS IA',
+    aiDuelBtn: '⚔ DUEL IA VS IA',
+    stopAiBtn: '⏹ REPRENDRE LA MAIN',
+    aiChatAccept: 'DÉFI ACCEPTÉ ! EN GARDE !',
+    aiChatDecline: 'DÉFI REFUSÉ.',
+    aiChatSos: "SOS ! BESOIN DE RENFORT DANS L'ARÈNE !",
+    aiChatNoSos: 'GÈRE TON DUEL TOI-MÊME !',
+    aiChatJoinSos: 'JE VIENS AIDER {caller} !',
+    aiChatChallenge: '{target}, JE TE DÉFIE SUR {map} !',
   },
 };
 
@@ -364,8 +383,14 @@ const listeners = new Set();
 
 export const getLang = () => current;
 
-export function tr(key) {
-  return STRINGS[current]?.[key] ?? STRINGS.en[key] ?? key;
+export function tr(key, vars = null) {
+  let out = STRINGS[current]?.[key] ?? STRINGS.en[key] ?? key;
+  if (vars && typeof out === 'string') {
+    for (const [k, v] of Object.entries(vars)) {
+      out = out.replaceAll(`{${k}}`, String(v));
+    }
+  }
+  return out;
 }
 
 export function applyDomI18n() {

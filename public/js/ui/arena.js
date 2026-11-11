@@ -28,11 +28,18 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
   const foldBtn = $('#btn-arena-fold');
   const copyBtn = $('#btn-arena-copy');
   const addAiBtn = $('#btn-arena-addai');
+  const aiDuelBtn = $('#btn-arena-aiduel');
+  const topActions = $('#arena-top-actions');
   const challengeAlert = $('#challenge-alert');
   const sosAlert = $('#sos-alert');
   const sosHudBtn = $('#btn-hud-sos');
   const specBar = $('#spec-bar');
+  const specStopBtn = $('#btn-spec-stop');
   const specTargetLabel = $('#spec-target-name');
+
+  const focusCanvas = () => {
+    $('#view')?.focus({ preventScroll: true });
+  };
 
   const setFolded = (on) => {
     folded = on;
@@ -46,42 +53,77 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
   foldBtn?.addEventListener('click', (e) => {
     e.currentTarget.blur();
     setFolded(!folded);
+    focusCanvas();
   });
   copyBtn?.addEventListener('click', (e) => {
     onCopy?.(e);
     e.currentTarget.blur();
+    focusCanvas();
   });
   addAiBtn?.addEventListener('click', (e) => {
     e.currentTarget.blur();
     sfx.unlock();
     net.send({ t: 'arena_add_ai' });
+    focusCanvas();
+  });
+  aiDuelBtn?.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    sfx.unlock();
+    net.send({
+      t: 'arena_ai_duel',
+      map: draftMap,
+      goal: draftGoal,
+      timeLimit: draftTimer,
+      rules: draftRules,
+    });
+    focusCanvas();
   });
   sosHudBtn?.addEventListener('click', (e) => {
     e.currentTarget.blur();
     sfx.unlock();
     net.send({ t: 'sos' });
+    focusCanvas();
   });
 
   $('#btn-spec-prev')?.addEventListener('click', (e) => {
     e.currentTarget.blur();
     game.cycleSpecTarget(-1);
     updateSpecLabel();
+    focusCanvas();
   });
   $('#btn-spec-next')?.addEventListener('click', (e) => {
     e.currentTarget.blur();
     game.cycleSpecTarget(1);
     updateSpecLabel();
+    focusCanvas();
+  });
+  specStopBtn?.addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    sfx.unlock();
+    net.send({ t: 'arena_stop' });
+    focusCanvas();
   });
 
-  // Hotkey Y triggers SOS backup call when fighting in the Colosseum!
+  // Hotkey Y triggers SOS backup call when fighting; Left/Right or A/D/[ ] cycles spectator cameras!
   window.addEventListener('keydown', (e) => {
     const tag = e.target?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
     if (!latestMsg) return;
     if (e.code === 'KeyY' && !e.repeat && latestMsg.st === 'playing' && !game.spectating) {
       net.send({ t: 'sos' });
-    } else if (game.spectating && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
-      game.cycleSpecTarget(e.code === 'BracketLeft' ? -1 : 1);
+    } else if (
+      game.spectating &&
+      !e.repeat &&
+      (e.code === 'BracketLeft' || e.code === 'ArrowLeft' || e.code === 'KeyA')
+    ) {
+      game.cycleSpecTarget(-1);
+      updateSpecLabel();
+    } else if (
+      game.spectating &&
+      !e.repeat &&
+      (e.code === 'BracketRight' || e.code === 'ArrowRight' || e.code === 'KeyD')
+    ) {
+      game.cycleSpecTarget(1);
       updateSpecLabel();
     }
   });
@@ -112,7 +154,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
 
     if (msg.st === 'idle') {
       fill(sides[0], tr('arenaHubTitle'), msg.roster.length, TEAM_COLORS[0], false);
-      fill(sides[1], 'AI + HUMANS', msg.roster.filter((r) => r.kind === 'ai').length, TEAM_COLORS[1], false);
+      fill(sides[1], tr('arenaAiCount'), msg.roster.filter((r) => r.kind === 'ai').length, TEAM_COLORS[1], false);
       $('#goal-text').textContent = tr('openRing');
     } else {
       const myTeam = game.slot >= 0 ? msg.teams[game.slot] : -1;
@@ -151,8 +193,8 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     if (!box) return;
     box.classList.remove('hidden');
 
-    // Auto-fold hub slightly when entering active combat so the fighter has maximum screen view!
-    if (msg.st === 'countdown' && !game.spectating && !folded) {
+    // Auto-fold hub when a match starts (whether fighting OR spectating!) so the screen is wide open!
+    if (msg.st === 'countdown' && !folded) {
       setFolded(true);
     } else if (msg.st === 'idle' && folded && !msg.challenge) {
       setFolded(false);
@@ -161,6 +203,8 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     $('#arena-code').textContent = msg.code;
     $('#arena-count').textContent = `${msg.roster.length}/12`;
     updateScoreboard(msg);
+
+    topActions?.classList.toggle('hidden', msg.st !== 'idle');
 
     // Fighter SOS button + Spectator camera bar
     const fightingNow = msg.st === 'playing' && !game.spectating && game.slot >= 0;
@@ -173,7 +217,11 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
 
     const inSpectatorView = game.spectating && msg.st !== 'idle';
     specBar?.classList.toggle('hidden', !inSpectatorView);
-    if (inSpectatorView) updateSpecLabel();
+    if (inSpectatorView) {
+      updateSpecLabel();
+      const anyHumanFighting = msg.roster.some((r) => r.kind === 'human' && r.fighting);
+      specStopBtn?.classList.toggle('hidden', anyHumanFighting);
+    }
 
     // Prune invalid allies
     const rosterIds = new Set(msg.roster.map((r) => r.id));
@@ -230,6 +278,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
             timeLimit: draftTimer,
             rules: draftRules,
           });
+          focusCanvas();
         });
         row.append(allyBtn, chBtn);
       } else if (actor.kind === 'ai' && canChallenge) {
@@ -317,10 +366,14 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
         yes.addEventListener('click', () => {
           sfx.unlock();
           net.send({ t: 'challenge_reply', accept: true });
+          focusCanvas();
         });
         const no = el('button', 'btn small', tr('declineChallenge'));
         no.type = 'button';
-        no.addEventListener('click', () => net.send({ t: 'challenge_reply', accept: false }));
+        no.addEventListener('click', () => {
+          net.send({ t: 'challenge_reply', accept: false });
+          focusCanvas();
+        });
         btns.append(yes, no);
       } else {
         const cancel = el('button', 'btn small', tr('cancelChallenge'));

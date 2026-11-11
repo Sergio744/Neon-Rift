@@ -73,7 +73,7 @@ export function enforceRulesOnInput(rules, player, inp) {
   }
   if (rules.noJetpack) {
     player.fuel = 0;
-    if (!player.grounded && player.jumps === 0 && (b & BTN.JUMP)) {
+    if (!player.grounded && player.flips === 0 && (b & BTN.JUMP) && player.jetHold > 0.14) {
       foul = foul || 'noJetpack';
       b &= ~BTN.JUMP;
     }
