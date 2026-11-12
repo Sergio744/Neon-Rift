@@ -1076,8 +1076,10 @@ kbd {
 
 .menu-top {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: -10px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -8px;
 }
 
 .lang-btn {
@@ -2330,6 +2332,333 @@ input:focus {
   color: var(--accent);
   letter-spacing: calc(var(--u) * 0.6);
 }
+
+/* ---------- Mobile & Tablet Twin-Stick Touch Controls ---------- */
+
+html,
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+#stage,
+#view {
+  touch-action: none;
+}
+
+.overlay,
+#waiting,
+#coop-wait,
+#arena-box,
+#chat-log {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+body.touch-playing #meters .keyhint {
+  display: none;
+}
+
+body.touch-playing #hotbar .slot {
+  width: calc(var(--u) * 30);
+  height: calc(var(--u) * 30);
+}
+
+.hud-btn.fs-btn {
+  padding-inline: calc(var(--u) * 4);
+}
+
+.rotate-banner {
+  position: fixed;
+  top: max(6px, env(safe-area-inset-top, 6px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 16px);
+  padding: 5px 10px;
+  background: rgba(14, 11, 28, 0.94);
+  border: 1px solid #ffd23f;
+  color: #ffd23f;
+  font-size: 9px;
+  text-align: center;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.6);
+}
+
+.rotate-banner button {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 3px;
+}
+
+.touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+  touch-action: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding:
+    max(10px, env(safe-area-inset-top, 10px))
+    max(14px, env(safe-area-inset-right, 14px))
+    max(12px, env(safe-area-inset-bottom, 12px))
+    max(14px, env(safe-area-inset-left, 14px));
+}
+
+.touch-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.touch-side.left {
+  align-items: flex-start;
+}
+
+.touch-side.right {
+  align-items: flex-end;
+}
+
+.touch-zone {
+  width: clamp(106px, 24vmin, 142px);
+  height: clamp(106px, 24vmin, 142px);
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.t-base {
+  position: relative;
+  width: clamp(92px, 21vmin, 122px);
+  height: clamp(92px, 21vmin, 122px);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20, 16, 43, 0.32) 0%, rgba(10, 8, 24, 0.62) 100%);
+  border: 2px solid rgba(62, 230, 255, 0.42);
+  box-shadow: 0 0 14px rgba(62, 230, 255, 0.14), inset 0 0 12px rgba(62, 230, 255, 0.1);
+  display: grid;
+  place-items: center;
+  transition: border-color 0.1s, box-shadow 0.1s;
+}
+
+.t-base.move.active {
+  border-color: rgba(62, 230, 255, 0.88);
+  box-shadow: 0 0 18px rgba(62, 230, 255, 0.35);
+}
+
+.t-base.move.sprinting {
+  border-color: #ffd23f;
+  box-shadow: 0 0 20px rgba(255, 210, 63, 0.45);
+}
+
+.t-base.aim {
+  border-color: rgba(255, 77, 157, 0.48);
+  box-shadow:
+    0 0 14px rgba(255, 77, 157, 0.16),
+    inset 0 0 0 15px rgba(255, 77, 157, 0.11);
+}
+
+.t-base.aim.active {
+  border-color: rgba(255, 77, 157, 0.85);
+}
+
+.t-base.aim.firing {
+  border-color: #ff3b6b;
+  box-shadow:
+    0 0 24px rgba(255, 59, 107, 0.65),
+    inset 0 0 0 16px rgba(255, 59, 107, 0.28);
+}
+
+.t-hint {
+  position: absolute;
+  bottom: 9px;
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  color: rgba(244, 241, 255, 0.46);
+  pointer-events: none;
+  text-align: center;
+}
+
+.t-nub {
+  width: clamp(38px, 8.8vmin, 48px);
+  height: clamp(38px, 8.8vmin, 48px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.9), rgba(62, 230, 255, 0.72));
+  border: 2px solid #080614;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.t-base.aim .t-nub {
+  background: radial-gradient(circle at 35% 35%, #fff2f8, rgba(255, 77, 157, 0.82));
+}
+
+.t-base.aim.firing .t-nub {
+  background: radial-gradient(circle at 35% 35%, #ffffff, #ff3b5c);
+}
+
+.touch-combat-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.touch-arc {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  margin-bottom: 4px;
+}
+
+.touch-util-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 4px;
+}
+
+.t-btn {
+  pointer-events: auto;
+  touch-action: none;
+  font-family: inherit;
+  color: var(--ink);
+  background: rgba(20, 16, 43, 0.68);
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-radius: 14px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 5px 8px;
+  min-width: 52px;
+  min-height: 46px;
+  cursor: pointer;
+  transition: transform 0.06s, background 0.08s, border-color 0.08s;
+}
+
+.t-btn b {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.t-btn small {
+  font-size: 7px;
+  color: rgba(244, 241, 255, 0.78);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.t-btn.pressed,
+.t-btn:active {
+  transform: scale(0.93);
+  background: rgba(62, 230, 255, 0.34);
+  border-color: var(--accent);
+}
+
+.t-btn.jump {
+  min-width: 78px;
+  min-height: 52px;
+  margin-left: 10px;
+  border-color: rgba(62, 230, 255, 0.62);
+  background: rgba(14, 34, 52, 0.66);
+}
+
+.t-btn.jump b {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.t-btn.fire {
+  min-width: 58px;
+  min-height: 52px;
+  border-color: rgba(255, 77, 157, 0.7);
+  background: rgba(56, 14, 38, 0.72);
+}
+
+.t-btn.fire.pressed,
+.t-btn.fire:active {
+  background: rgba(255, 59, 107, 0.52);
+  border-color: #ff6b9d;
+}
+
+.t-btn.alt {
+  border-color: rgba(255, 210, 63, 0.55);
+}
+
+.t-btn.melee {
+  border-color: rgba(180, 255, 90, 0.5);
+}
+
+.t-btn.mini {
+  min-width: 46px;
+  min-height: 34px;
+  border-radius: 10px;
+  padding: 4px 7px;
+}
+
+.t-btn.mini b {
+  font-size: 11px;
+}
+
+.t-btn.build.active {
+  border-color: #b4ff5a;
+  background: rgba(60, 96, 22, 0.78);
+  color: #b4ff5a;
+}
+
+.t-btn.style {
+  border-color: #b4ff5a;
+  color: #b4ff5a;
+}
+
+/* Portrait phone handheld console mode: stage docks cleanly in the upper screen above the Twin-Sticks! */
+@media (orientation: portrait) and (max-width: 760px) {
+  body.touch-playing {
+    align-items: start;
+    padding-top: max(36px, calc(env(safe-area-inset-top, 8px) + 32px));
+  }
+
+  .touch-controls {
+    padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  }
+}
+
+/* Compact menu overlays on landscape phones & small mobile viewports */
+@media (max-height: 500px), (max-width: 560px) {
+  .overlay {
+    align-items: flex-start;
+    padding: 8px;
+  }
+
+  .panel {
+    padding: 14px 16px;
+    gap: 8px;
+  }
+
+  .panel-title {
+    font-size: 20px;
+  }
+
+  .btn {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
 
 
 

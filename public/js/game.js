@@ -3,7 +3,7 @@ import { ITEM } from '/shared/game/items.js';
 import { buildMap } from '/shared/maps.js';
 import { createPlayer, stepPlayer, unpackPlayer } from '/shared/player.js';
 import { ALIVE, stepProj, unpackProj } from '/shared/projectiles.js';
-import { FULL_POOL, W, owns, poolList, sanitizePool } from '/shared/weapons.js';
+import { FULL_POOL, W, WEAPONS, owns, poolList, sanitizePool } from '/shared/weapons.js';
 import { builder } from './client/builder.js';
 import { events } from './client/events.js';
 import { interp } from './client/interp.js';
@@ -240,7 +240,20 @@ export class ClientGame {
       if (req) this.pickWeapon(req);
       const breq = input.takeBuildRequest();
       if (breq) this.changeBuild(breq);
-      const b = input.buttons();
+      if (input.touchAimLatched && !me.dead) {
+        input.syncTouchCrosshair(me.x / 2 - this.camBx, (me.y - PHYS.AIM_Y) / 2 - this.camBy);
+      }
+      let b = input.buttons();
+      if (
+        (b & BTN.FIRE) &&
+        input.touchAutoPulseFire &&
+        this.wantW !== W.builder &&
+        !WEAPONS[this.wantW]?.auto &&
+        me.cd <= 0 &&
+        (this.prevB & BTN.FIRE)
+      ) {
+        b &= ~BTN.FIRE;
+      }
       const pressed = b & ~this.prevB;
       this.prevB = b;
 
@@ -386,6 +399,9 @@ export class ClientGame {
       if (Math.abs(r.x / 2 - cx - 400) < 460 && Math.abs(r.y / 2 - cy - 225) < 290) this.drawPlayer(ctx, s, r, r.x, r.y, r.aim, dt);
     }
     if (meOn) this.drawPlayer(ctx, this.slot, me, mx, my, this.aim, dt);
+    if (meOn && this.input.touchAimLatched) {
+      this.input.syncTouchCrosshair(mx / 2 - cx, (my - PHYS.AIM_Y) / 2 - cy);
+    }
     if (meOn && this.wantW === W.builder) this.drawBuildPreview(ctx, me.x, me.y);
     this.drawLasers(ctx, others, meOn ? { x: mx, y: my } : null);
 

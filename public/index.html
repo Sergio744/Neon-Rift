@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Neon Rift</title>
     <meta name="description" content="Neon Rift — Free open-source community stickman shooter on fully destructible falling-sand pixel maps: 1v1 duels, group rooms of up to 8 (FFA or teams), solo and co-op survival. Inspired by Stick Duel." />
     <meta property="og:title" content="Neon Rift — Open-Source Destructible Stickman Shooter" />
@@ -11,20 +13,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/style.css?v=6" />
+    <link rel="stylesheet" href="/style.css?v=7" />
     <script type="importmap">
       {
         "imports": {
-          "/js/main.js": "/js/main.js?v=6",
-          "/js/i18n.js": "/js/i18n.js?v=6",
-          "/js/comms.js": "/js/comms.js?v=6",
-          "/js/game.js": "/js/game.js?v=6",
-          "/js/input.js": "/js/input.js?v=6",
-          "/js/ui/arena.js": "/js/ui/arena.js?v=6",
-          "/js/ui/room.js": "/js/ui/room.js?v=6",
-          "/js/ui/controls.js": "/js/ui/controls.js?v=6",
-          "/js/ui/hud.js": "/js/ui/hud.js?v=6",
-          "/shared/rules.js": "/shared/rules.js?v=6"
+          "/js/main.js": "/js/main.js?v=7",
+          "/js/i18n.js": "/js/i18n.js?v=7",
+          "/js/comms.js": "/js/comms.js?v=7",
+          "/js/game.js": "/js/game.js?v=7",
+          "/js/input.js": "/js/input.js?v=7",
+          "/js/touch.js": "/js/touch.js?v=7",
+          "/js/ui/arena.js": "/js/ui/arena.js?v=7",
+          "/js/ui/room.js": "/js/ui/room.js?v=7",
+          "/js/ui/controls.js": "/js/ui/controls.js?v=7",
+          "/js/ui/hud.js": "/js/ui/hud.js?v=7",
+          "/shared/rules.js": "/shared/rules.js?v=7"
         }
       }
     </script>
@@ -64,6 +67,9 @@
           <button class="hud-btn comms-btn hidden" id="btn-hud-vscope" type="button" data-i18n="voiceAll">VOICE: ALL</button>
           <button class="hud-btn sos-btn hidden" id="btn-hud-sos" type="button" title="Y">
             <span data-i18n="sosBtn">SOS HELP</span>
+          </button>
+          <button class="hud-btn fs-btn" id="btn-hud-fs" type="button" title="Fullscreen">
+            <span>⛶</span>
           </button>
         </div>
         <div id="holo-cams" class="hidden"></div>
@@ -236,6 +242,7 @@
       <div id="menu" class="overlay">
         <div class="panel menu-panel">
           <div class="menu-top">
+            <button class="lang-btn" id="btn-menu-fs" type="button" title="Fullscreen">⛶ <span data-i18n="fullscreen">FULLSCREEN</span></button>
             <button class="lang-btn" id="btn-lang" type="button" title="Switch language / Changer de langue">EN ▾ FR</button>
           </div>
           <canvas id="logo" width="200" height="40"></canvas>
@@ -303,6 +310,7 @@
           <div class="settings">
             <button class="toggle" id="btn-mute" type="button"><span data-i18n="sound">SOUND</span><b>ON</b></button>
             <button class="toggle" id="btn-shake" type="button"><span data-i18n="screenShake">SCREEN SHAKE</span><b>ON</b></button>
+            <button class="toggle" id="btn-touch" type="button"><span data-i18n="touchControls">TOUCH CONTROLS</span><b>AUTO</b></button>
             <button class="toggle" id="btn-help" type="button"><span data-i18n="controlsPanel">CONTROLS PANEL</span><b>OFF</b></button>
           </div>
           <button class="btn wide danger" id="btn-leave" type="button" data-i18n="leaveMatch">LEAVE MATCH</button>
@@ -352,6 +360,58 @@
       <div id="toast"></div>
     </div>
 
-    <script type="module" src="/js/main.js?v=6"></script>
+    <div id="rotate-banner" class="rotate-banner hidden">
+      <span data-i18n="rotateHint">ROTATE TO LANDSCAPE OR TAP ⛶ FOR FULL COMFORT</span>
+      <button type="button" id="btn-rotate-close" aria-label="Close">×</button>
+    </div>
+
+    <div id="touch-controls" class="touch-controls hidden" aria-label="Mobile Touch Controls">
+      <div class="touch-side left">
+        <button type="button" id="touch-jump" class="t-btn jump">
+          <b>▲</b><small data-i18n="touchJump">JUMP / JET</small>
+        </button>
+        <div id="touch-move-zone" class="touch-zone">
+          <div id="touch-move-base" class="t-base move">
+            <span class="t-hint" data-i18n="touchMoveHint">MOVE</span>
+            <div id="touch-move-nub" class="t-nub"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="touch-side right">
+        <div class="touch-util-row">
+          <button type="button" id="touch-style" class="t-btn mini style hidden">
+            <small data-i18n="touchStyle">STYLE</small>
+          </button>
+          <button type="button" id="touch-build" class="t-btn mini build">
+            <b>B</b><small data-i18n="touchBuild">BUILD</small>
+          </button>
+          <button type="button" id="touch-swap" class="t-btn mini swap">
+            <b>↻</b><small data-i18n="touchSwap">WEAPON</small>
+          </button>
+        </div>
+        <div class="touch-combat-row">
+          <div class="touch-arc">
+            <button type="button" id="touch-alt" class="t-btn alt">
+              <b>💣</b><small data-i18n="touchAlt">ALT</small>
+            </button>
+            <button type="button" id="touch-melee" class="t-btn melee">
+              <b>👊</b><small data-i18n="touchMelee">SHOVE</small>
+            </button>
+            <button type="button" id="touch-fire" class="t-btn fire">
+              <b>🔥</b><small data-i18n="touchFire">FIRE</small>
+            </button>
+          </div>
+          <div id="touch-aim-zone" class="touch-zone">
+            <div id="touch-aim-base" class="t-base aim">
+              <span class="t-hint" data-i18n="touchAimHint">AIM &amp; FIRE</span>
+              <div id="touch-aim-nub" class="t-nub"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/js/main.js?v=7"></script>
   </body>
 </html>

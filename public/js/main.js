@@ -11,6 +11,7 @@ import { applyDomI18n, onLangChange, toggleLang, tr } from './i18n.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { SoloServer } from './solo.js';
+import { createTouchControls } from './touch.js';
 import { chips, poolPicker, settingRow } from './ui/controls.js';
 import { createArenaUi } from './ui/arena.js';
 import { createFeel } from './ui/feel.js';
@@ -28,6 +29,20 @@ const fx = new Fx();
 const sfx = new Sfx();
 const game = new ClientGame({ net, input, fx, sfx });
 const solo = new SoloServer(game, { onSnapshot: (snap) => survivalSnapshot(snap) });
+const touch = createTouchControls({
+  input,
+  game,
+  sfx,
+  isPlayable: () =>
+    Boolean(
+      game.active &&
+        mode !== 'menu' &&
+        !game.spectating &&
+        ui.pause.classList.contains('hidden') &&
+        ui.over.classList.contains('hidden') &&
+        ui.soloOver.classList.contains('hidden'),
+    ),
+});
 
 const ui = {
   menu: $('#menu'),
@@ -615,10 +630,18 @@ function toggleLabel(id, on) {
   b.textContent = on ? 'ON' : 'OFF';
   b.classList.toggle('off', !on);
 }
+function updateTouchPrefLabel() {
+  const b = $('#btn-touch b');
+  if (!b) return;
+  b.textContent = touch.prefLabel();
+  b.classList.toggle('off', touch.getPref() === 'off');
+}
+
 function applyPrefs() {
   fx.shakeMul = prefs.shake ? 1 : 0;
   toggleLabel('#btn-shake', prefs.shake);
   toggleLabel('#btn-help', !ui.help.classList.contains('hidden'));
+  updateTouchPrefLabel();
 }
 function setHelp(on, remember = true) {
   ui.help.classList.toggle('hidden', !on);
@@ -626,8 +649,12 @@ function setHelp(on, remember = true) {
   savePrefs();
   applyPrefs();
 }
-// The controls panel shows on your very first match, then stays tucked away unless you want it.
+// The controls panel shows on your very first desktop match; on touch devices virtual pads are self-explanatory.
 function helpOnStart() {
+  if (touch.isEnabled()) {
+    setHelp(false, false);
+    return;
+  }
   if (!prefs.helpSeen) {
     prefs.helpSeen = true;
     setHelp(true, false);
@@ -638,6 +665,18 @@ $('#btn-shake').addEventListener('click', () => {
   prefs.shake = !prefs.shake;
   savePrefs();
   applyPrefs();
+});
+$('#btn-touch')?.addEventListener('click', () => {
+  touch.cyclePref();
+  updateTouchPrefLabel();
+});
+$('#btn-hud-fs')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  touch.toggleFullscreen();
+});
+$('#btn-menu-fs')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  touch.toggleFullscreen();
 });
 $('#btn-help').addEventListener('click', () => setHelp(ui.help.classList.contains('hidden')));
 applyPrefs();
@@ -1113,6 +1152,7 @@ net.on('lobby', () => {
 $('#btn-lang')?.addEventListener('click', toggleLang);
 onLangChange(() => {
   ui.conn.textContent = net.open ? tr('connected') : tr('connecting');
+  updateTouchPrefLabel();
   renderBest();
   if (mode === 'solo' || mode === 'coop') {
     $('#pause-note').textContent = tr(mode === 'solo' ? 'soloPaused' : 'coopPaused');
@@ -1219,6 +1259,7 @@ function frame(now) {
   if (steps === 15) acc = 0;
   if (!frozen) fx.update(dt);
   game.render(ctx, acc / TICK_MS, frozen ? 0 : dt);
+  touch.syncVisibility();
   updateHud(dt);
   requestAnimationFrame(frame);
 }

@@ -367,8 +367,8 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
       bot.err = (rng() * 2 - 1) * S.aimErr;
     }
     if (wantDig && digUp) {
-      // Carve almost straight overhead (`-82 deg`) so the bot's 12px-wide head clears vertical earth ceilings cleanly to the surface!
-      desired = -Math.PI / 2 + (move || 1) * 0.14;
+      // Carve straight overhead (`-90 deg`) so even hard MAT_ROCK veins (`r = 11.2px`) clear the 12px-wide body symmetrically!
+      desired = -Math.PI / 2;
     } else if (wantDig && digPoint) {
       const sinA = Math.max(-0.55, Math.min(0.62, (digPoint.wy - (p.y - 29)) / 30));
       const pitch = Math.asin(sinA);
