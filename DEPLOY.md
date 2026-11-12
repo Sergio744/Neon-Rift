@@ -65,10 +65,19 @@ Le fichier [`render.yaml`](render.yaml) est déjà configuré dans le dépôt :
 3. Cliquez sur **Apply** : votre jeu sera en ligne en HTTPS + WebSocket sécurisé (`wss://`) automatiquement !
    *(Astuce : l'offre gratuite Render met le serveur en veille après 15 min sans joueur et le réveille automatiquement dès qu'un joueur ouvre le lien.)*
 
-### Option 2 : Koyeb (Offre Hobby Gratuite via Docker)
-1. Créez un compte gratuit sur [koyeb.com](https://www.koyeb.com).
-2. Connectez votre dépôt GitHub `Sergio744/Neon-Rift`, choisissez le mode **Dockerfile** (déjà fourni à la racine), port `3030`, health check `/healthz`.
-3. Laissez le scaling à **1 instance** et déployez !
+### Option 2 : Koyeb (Offre Hobby Gratuite via Docker — Recommandé)
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=git&repository=github.com/Sergio744/Neon-Rift&branch=main&name=neon-rift&builder=dockerfile&ports=3030;http;/&hc_protocol[3030]=http&hc_path[3030]=/healthz)
+
+1. Créez un compte gratuit sur [koyeb.com](https://www.koyeb.com) (plan **Hobby** à 0 €).
+2. Cliquez sur le bouton **Deploy to Koyeb** ci-dessus (ou dans le tableau de bord : **Create Web Service → GitHub → `Sergio744/Neon-Rift`**).
+3. Vérifiez les réglages :
+   - **Branch** : `main`
+   - **Builder** : **Dockerfile** (déjà fourni à la racine)
+   - **Instance** : **Free** (`0.1 vCPU / 512 MB RAM` — largement suffisant !)
+   - **Region** : **Frankfurt (`fra`)** (meilleur ping pour l'Europe et l'Afrique de l'Ouest)
+   - **Exposed port** : `3030` (HTTP `/`), **Health check** : HTTP sur `/healthz`
+   - **Scaling** : `1` instance fixe
+4. Cliquez sur **Deploy** : Koyeb vous fournit immédiatement une URL publique en `https://...koyeb.app` avec WebSockets (`wss://`) actifs !
 
 ### Option 3 : Docker / VPS personnel (Coolify, Railway, Fly.io, OVH, Hetzner...)
 ```bash

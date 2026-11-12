@@ -1,4 +1,4 @@
-import { BUFF, BUFF_INFO } from '/shared/constants.js';
+import { BTN, BUFF, BUFF_INFO } from '/shared/constants.js';
 import { CONTINUOUS, FULL_POOL, KILL_NAMES, W, WEAPONS, owns, poolBar } from '/shared/weapons.js';
 import { tr } from '../i18n.js';
 import { GUNS, NADE_ICON } from '../sprites.js';
@@ -65,7 +65,7 @@ export function createHud({ game, sfx, showYou }) {
       const pick = builder ? { builder: true } : { bar: bar.nums.indexOf(w) };
       return { w, ...makeSlot(GUNS[w].img, keyOf(bar, w), () => game.pickWeapon(pick), builder ? ' build' : '') };
     });
-    nade = makeSlot(NADE_ICON, 'R', null, ' nade');
+    nade = makeSlot(NADE_ICON, 'R', () => game.input.triggerTouchBtn(BTN.ALT), ' nade');
     tip.classList.add('hidden');
     hotbar.appendChild(tip);
     lastW = -1;

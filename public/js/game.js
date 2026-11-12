@@ -3,7 +3,7 @@ import { ITEM } from '/shared/game/items.js';
 import { buildMap } from '/shared/maps.js';
 import { createPlayer, stepPlayer, unpackPlayer } from '/shared/player.js';
 import { ALIVE, stepProj, unpackProj } from '/shared/projectiles.js';
-import { FULL_POOL, W, owns, poolList, sanitizePool } from '/shared/weapons.js';
+import { FULL_POOL, W, WEAPONS, owns, poolList, sanitizePool } from '/shared/weapons.js';
 import { builder } from './client/builder.js';
 import { events } from './client/events.js';
 import { interp } from './client/interp.js';
@@ -11,7 +11,7 @@ import { shots } from './client/shots.js';
 import { TerrainSync } from './client/terrain-sync.js';
 import './fx-tools.js';
 import {
-  TerrainView, drawCrosshair, drawItem, drawNameTag, drawOffscreen, drawProjectile, drawStick, makeSky,
+  TerrainView, drawCrosshair, drawItem, drawNameTag, drawOffscreen, drawProjectile, drawSpeechBubble, drawStick, makeSky,
 } from './render.js';
 
 const MAX_SNAPS = 40;
@@ -55,6 +55,8 @@ export class ClientGame {
     this.time = 0;
     this.hitFlash = 0;
     this.armory = -1;
+    this.spectating = false;
+    this.specTarget = -1; // -1 = auto-follow action midpoint, >=0 = follow specific slot
     this.pool = FULL_POOL; // allowed weapons of the current match: hotbar and number keys follow it
     this.onFeed = null;
     this.onHurt = null;
@@ -136,8 +138,26 @@ export class ClientGame {
   leave() {
     this.active = false;
     this.slot = -1;
+    this.spectating = false;
+    this.specTarget = -1;
     this.sfx.setLoops(0, this.sfx.earX, false, 0);
     this.sfx.setLoops(1, this.sfx.earX, false, 0);
+  }
+
+  cycleSpecTarget(delta = 1) {
+    const live = [];
+    for (let s = 0; s < this.remotes.length; s++) {
+      if (this.remotes[s] && this.present[s]) live.push(s);
+    }
+    if (!live.length) {
+      this.specTarget = -1;
+      return -1;
+    }
+    const order = [-1, ...live];
+    const curIdx = order.indexOf(this.specTarget);
+    const nextIdx = (curIdx + delta + order.length) % order.length;
+    this.specTarget = order[nextIdx];
+    return this.specTarget;
   }
 
   // Server tick currently shown for remote entities (fractional).
@@ -209,46 +229,62 @@ export class ClientGame {
   // ---------- fixed tick ----------
 
   tick() {
-    if (!this.active || this.slot < 0) return;
-    const me = this.me;
-    const input = this.input;
-
-    const req = input.takeWeaponRequest();
-    if (req) this.pickWeapon(req);
-    const breq = input.takeBuildRequest();
-    if (breq) this.changeBuild(breq);
-    const b = input.buttons();
-    const pressed = b & ~this.prevB;
-    this.prevB = b;
-
-    const aimAt = { x: (input.mx + this.camBx) * 2, y: (input.my + this.camBy) * 2 };
-    if (!me.dead) this.aim = Math.atan2(aimAt.y - (me.y - PHYS.AIM_Y), aimAt.x - me.x);
-    if (pressed & BTN.FIRE && !me.dead && me.ammo[me.w] === 0 && me.buff !== BUFF.FRENZY) {
-      this.sfx.play('empty', me.x);
-      if (this.wantW !== 0) this.pickWeapon({ abs: 0 });
-    }
-    if (pressed & BTN.SPRINT && !me.dead) this.sfx.play('sprint', me.x);
-
+    if (!this.active) return;
     const rt = this.renderTick();
-    const inp = {
-      s: ++this.seq, b, a: r3(this.aim), w: this.wantW, v: Math.max(0, Math.floor(rt)), nf: this.roomState === 'countdown',
-      k: this.buildKey(aimAt),
-    };
-    this.prev.x = me.x;
-    this.prev.y = me.y;
-    const out = [];
-    stepPlayer(me, inp, this.terrain, out, { noFire: inp.nf });
-    for (const a of out) this.localAction(a, inp.s);
-    this.pending.push(inp);
-    if (this.pending.length > 240) this.pending.shift();
-    this.net.send({ t: 'i', l: [[inp.s, inp.b, inp.a, inp.w, inp.v, inp.k]] });
 
-    this.err.x *= Math.exp(-12 * DT);
-    this.err.y *= Math.exp(-12 * DT);
+    if (this.slot >= 0 && !this.spectating) {
+      const me = this.me;
+      const input = this.input;
 
-    for (const g of this.ghosts) {
-      if (g.done) continue;
-      if (stepProj(g.pr, this.terrain, DT) !== ALIVE) g.done = true;
+      const req = input.takeWeaponRequest();
+      if (req) this.pickWeapon(req);
+      const breq = input.takeBuildRequest();
+      if (breq) this.changeBuild(breq);
+      if (input.touchAimLatched && !me.dead) {
+        input.syncTouchCrosshair(me.x / 2 - this.camBx, (me.y - PHYS.AIM_Y) / 2 - this.camBy);
+      }
+      let b = input.buttons();
+      if (
+        (b & BTN.FIRE) &&
+        input.touchAutoPulseFire &&
+        this.wantW !== W.builder &&
+        !WEAPONS[this.wantW]?.auto &&
+        me.cd <= 0 &&
+        (this.prevB & BTN.FIRE)
+      ) {
+        b &= ~BTN.FIRE;
+      }
+      const pressed = b & ~this.prevB;
+      this.prevB = b;
+
+      const aimAt = { x: (input.mx + this.camBx) * 2, y: (input.my + this.camBy) * 2 };
+      if (!me.dead) this.aim = Math.atan2(aimAt.y - (me.y - PHYS.AIM_Y), aimAt.x - me.x);
+      if (pressed & BTN.FIRE && !me.dead && me.ammo[me.w] === 0 && me.buff !== BUFF.FRENZY) {
+        this.sfx.play('empty', me.x);
+        if (this.wantW !== 0) this.pickWeapon({ abs: 0 });
+      }
+      if (pressed & BTN.SPRINT && !me.dead) this.sfx.play('sprint', me.x);
+
+      const inp = {
+        s: ++this.seq, b, a: r3(this.aim), w: this.wantW, v: Math.max(0, Math.floor(rt)), nf: this.roomState === 'countdown',
+        k: this.buildKey(aimAt),
+      };
+      this.prev.x = me.x;
+      this.prev.y = me.y;
+      const out = [];
+      stepPlayer(me, inp, this.terrain, out, { noFire: inp.nf });
+      for (const a of out) this.localAction(a, inp.s);
+      this.pending.push(inp);
+      if (this.pending.length > 240) this.pending.shift();
+      this.net.send({ t: 'i', l: [[inp.s, inp.b, inp.a, inp.w, inp.v, inp.k]] });
+
+      this.err.x *= Math.exp(-12 * DT);
+      this.err.y *= Math.exp(-12 * DT);
+
+      for (const g of this.ghosts) {
+        if (g.done) continue;
+        if (stepProj(g.pr, this.terrain, DT) !== ALIVE) g.done = true;
+      }
     }
 
     while (this.delayed.length && this.delayed[0].k <= rt) this.playRemote(this.delayed.shift().ev);
@@ -258,7 +294,7 @@ export class ClientGame {
     this.continuousFx();
   }
 
-  // Follows the local player with a lead towards the cursor, clamped to the map.
+  // Follows the local player with a lead towards the cursor, or tracks Arena fighters when spectating.
   updateCamera(x, y, alive, dt) {
     const MW = this.terrain.w * 2;
     const MH = this.terrain.h * 2;
@@ -270,6 +306,33 @@ export class ClientGame {
       const scope = this.wantW === W.sniper ? 2 : 1; // the sniper scope drags the view towards the cursor
       tx = x - 800 + (this.input.mx * 2 - 800) * 0.3 * scope;
       ty = y - PHYS.HEIGHT / 2 - 450 + (this.input.my * 2 - 450) * 0.25 * scope;
+    } else if (this.spectating || this.slot < 0) {
+      const tgt = this.specTarget >= 0 && this.remotes[this.specTarget] && !this.remotes[this.specTarget].dead
+        ? this.remotes[this.specTarget]
+        : null;
+      if (tgt) {
+        tx = tgt.x - 800;
+        ty = tgt.y - PHYS.HEIGHT / 2 - 450;
+      } else {
+        let sx = 0;
+        let sy = 0;
+        let n = 0;
+        for (let s = 0; s < this.remotes.length; s++) {
+          const r = this.remotes[s];
+          if (r && !r.dead && this.present[s]) {
+            sx += r.x;
+            sy += r.y;
+            n++;
+          }
+        }
+        if (n > 0) {
+          tx = sx / n - 800;
+          ty = sy / n - PHYS.HEIGHT / 2 - 450;
+        } else {
+          tx = this.cam ? this.cam.x : (MW - 1600) / 2;
+          ty = this.cam ? this.cam.y : (MH - 900) / 2;
+        }
+      }
     } else if (this.cam) {
       tx = this.cam.x;
       ty = this.cam.y;
@@ -336,6 +399,9 @@ export class ClientGame {
       if (Math.abs(r.x / 2 - cx - 400) < 460 && Math.abs(r.y / 2 - cy - 225) < 290) this.drawPlayer(ctx, s, r, r.x, r.y, r.aim, dt);
     }
     if (meOn) this.drawPlayer(ctx, this.slot, me, mx, my, this.aim, dt);
+    if (meOn && this.input.touchAimLatched) {
+      this.input.syncTouchCrosshair(mx / 2 - cx, (my - PHYS.AIM_Y) / 2 - cy);
+    }
     if (meOn && this.wantW === W.builder) this.drawBuildPreview(ctx, me.x, me.y);
     this.drawLasers(ctx, others, meOn ? { x: mx, y: my } : null);
 
@@ -344,6 +410,12 @@ export class ClientGame {
     for (const s of others) {
       const r = this.remotes[s];
       drawNameTag(ctx, r.x, r.y, this.names[s] || `P${s + 1}`, this.color(s), r.hp, true);
+      const bub = this.bubbleFor?.(s);
+      if (bub) drawSpeechBubble(ctx, r.x, r.y, bub.text, this.color(s), bub.alpha);
+    }
+    if (meOn) {
+      const myBub = this.bubbleFor?.(this.slot);
+      if (myBub) drawSpeechBubble(ctx, mx, my, myBub.text, this.color(this.slot), myBub.alpha);
     }
     ctx.restore();
 

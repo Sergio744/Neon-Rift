@@ -12,6 +12,7 @@ RUN npm ci --omit=dev || npm install --omit=dev
 COPY server ./server
 COPY shared ./shared
 COPY public ./public
+COPY agents ./agents
 
 USER node
 

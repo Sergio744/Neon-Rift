@@ -66,13 +66,15 @@ export function startServer({ port = Number(process.env.PORT) || 3030, host = pr
     res.writeHead(200, {
       'content-type': TYPES[extname(file)] || 'application/octet-stream',
       'content-length': st.size,
-      'cache-control': 'no-cache',
+      'cache-control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      pragma: 'no-cache',
+      expires: '0',
     });
     if (req.method === 'HEAD') res.end();
     else createReadStream(file).pipe(res);
   });
 
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024, perMessageDeflate: false });
+  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024, perMessageDeflate: false });
   wss.on('connection', (ws) => {
     ws._socket?.setNoDelay?.(true);
     lobby.connect(ws);

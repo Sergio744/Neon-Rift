@@ -11,7 +11,9 @@ import { PROJ, VORTEX_P } from '../shared/projectiles.js';
 import { Survival } from '../shared/survival.js';
 import { FULL_POOL, PRISM, RIFT_POOL, W, WEAPONS, owns, poolStart, sanitizePool } from '../shared/weapons.js';
 import { startServer } from '../server/index.js';
+import { ArenaHub } from '../server/arena-hub.js';
 import { Room } from '../server/room.js';
+import { launchAutonomousAgent } from '../agents/autonomous-player.mjs';
 
 function duel(map = 'flat') {
   const g = new Game(map, 4242);
@@ -402,3 +404,564 @@ test('Rift Boost Orbs grant temporary Turbo, Overdrive, Shield and Frenzy buffs 
   }
   assert.equal(p0.buff, BUFF.NONE, 'Frenzy expired after duration');
 });
+
+test('in-game HUD serves dedicated Pause and Main Menu buttons with EN/FR translations', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  try {
+    const res = await fetch(`http://127.0.0.1:${srv.port}/`);
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.ok(html.includes('id="btn-hud-pause"'), 'Pause button exists in HUD');
+    assert.ok(html.includes('id="btn-hud-menu"'), 'Main Menu button exists in HUD');
+    assert.ok(html.includes('data-i18n="hudPause"'));
+    assert.ok(html.includes('data-i18n="hudMenu"'));
+
+    const i18nRes = await fetch(`http://127.0.0.1:${srv.port}/js/i18n.js`);
+    assert.equal(i18nRes.status, 200);
+    const i18nSrc = await i18nRes.text();
+    assert.ok(i18nSrc.includes("hudMenu: 'MAIN MENU'"));
+    assert.ok(i18nSrc.includes("hudMenu: 'MENU PRINCIPAL'"));
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Hybrid Squads: private duel upgrades in-place to Teams, mixes humans + NPC bots, obeys orders, and yields bot slots to friends', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const host = mkClient();
+    const friend = mkClient();
+    const lateFriend = mkClient();
+    await Promise.all([host.open, friend.open, lateFriend.open]);
+
+    // 1. Creator makes a private duel and upgrades it live to Teams keeping the exact same code!
+    host.send({ t: 'create', name: 'sergio' });
+    const created = await host.wait((m) => m.t === 'joined' && m.mode === 'duel');
+    const code = created.code;
+
+    host.msgs.length = 0;
+    host.send({ t: 'squads', mode: 'teams' });
+    const upgraded = await host.wait((m) => m.t === 'room' && m.mode === 'teams' && m.max === 8);
+    assert.equal(upgraded.code, code, 'invite code stays identical after upgrading to Squads');
+
+    // 2. Friend joins via the original link; both join CYAN (team 0) and add NPC bots on PINK (team 1) & CYAN!
+    friend.send({ t: 'join', name: 'alex', code });
+    await friend.wait((m) => m.t === 'joined' && m.slot === 1);
+
+    friend.msgs.length = 0;
+    friend.send({ t: 'team', team: 0 });
+    await friend.wait((m) => m.t === 'room' && m.teams[0] === 0 && m.teams[1] === 0);
+
+    host.msgs.length = 0;
+    host.send({ t: 'botskill', skill: 'ace' });
+    host.send({ t: 'addbot', team: 0 }); // allied bot on CYAN
+    host.send({ t: 'addbot', team: 1 }); // enemy bot 1 on PINK
+    host.send({ t: 'addbot', team: 1 }); // enemy bot 2 on PINK
+    const withBots = await host.wait((m) => m.t === 'room' && m.bots?.filter(Boolean).length === 3);
+    assert.equal(withBots.botSkill, 'ace');
+    assert.equal(withBots.teams[2], 0, 'allied bot placed on CYAN');
+    assert.equal(withBots.teams[3], 1, 'enemy bot placed on PINK');
+    assert.equal(withBots.teams[4], 1, 'second enemy bot placed on PINK');
+
+    // 3. Fill remaining 3 slots with bots (total 8/8), then verify a real human friend evicts a bot!
+    host.msgs.length = 0;
+    host.send({ t: 'addbot', team: 0 });
+    host.send({ t: 'addbot', team: 1 });
+    host.send({ t: 'addbot', team: 0 });
+    await host.wait((m) => m.t === 'room' && m.names.filter(Boolean).length === 8);
+
+    lateFriend.send({ t: 'join', name: 'maya', code });
+    const mayaJoined = await lateFriend.wait((m) => m.t === 'joined');
+    assert.ok(mayaJoined.slot >= 2, 'real friend seamlessly replaced an NPC bot in an 8/8 room');
+
+    // 4. Issue tactical order ('hold') to allied CYAN bots and verify bot chat acknowledgment + start match!
+    host.msgs.length = 0;
+    host.send({ t: 'order', cmd: 'hold' });
+    const botAck = await host.wait((m) => m.t === 'chat' && m.bot === true);
+    assert.equal(botAck.scope, 'team');
+    assert.ok(botAck.text.includes('HOLDING'));
+
+    host.msgs.length = 0;
+    host.send({ t: 'start' });
+    const countdown = await host.wait((m) => m.t === 'room' && m.st === 'countdown');
+    assert.equal(countdown.mode, 'teams');
+
+    host.ws.close();
+    friend.ws.close();
+    lateFriend.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Rift Comms: global chat, team-only chat privacy, media state broadcast, and WebRTC signaling relay', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const c0 = mkClient();
+    const c1 = mkClient();
+    const c2 = mkClient();
+    await Promise.all([c0.open, c1.open, c2.open]);
+
+    c0.send({ t: 'create', name: 'alpha', mode: 'teams' });
+    const j0 = await c0.wait((m) => m.t === 'joined');
+    const code = j0.code;
+
+    c1.send({ t: 'join', name: 'bravo', code });
+    await c1.wait((m) => m.t === 'joined' && m.slot === 1); // team 1 (PINK)
+    c2.send({ t: 'join', name: 'charlie', code });
+    await c2.wait((m) => m.t === 'joined' && m.slot === 2); // team 0 (CYAN, same as alpha)
+
+    // 1. Team-scoped message from alpha (team 0) reaches charlie (team 0) and NEVER bravo (team 1)!
+    c0.msgs.length = 0;
+    c1.msgs.length = 0;
+    c2.msgs.length = 0;
+    c0.send({ t: 'chat', scope: 'team', text: 'Rush high ground!' });
+    const teamMsg = await c2.wait((m) => m.t === 'chat' && m.scope === 'team');
+    assert.equal(teamMsg.text, 'Rush high ground!');
+
+    // Global message reaches everyone including rival team (bravo)
+    c0.send({ t: 'chat', scope: 'all', text: 'GL HF everyone!' });
+    const allMsg = await c1.wait((m) => m.t === 'chat' && m.scope === 'all');
+    assert.equal(allMsg.text, 'GL HF everyone!');
+    assert.equal(
+      c1.msgs.some((m) => m.t === 'chat' && m.scope === 'team'),
+      false,
+      'rival team never receives secret team chat',
+    );
+
+    // 2. Live Mic/Cam media state broadcast + WebRTC peer-to-peer signaling relay
+    c1.msgs.length = 0;
+    c0.send({ t: 'media', mic: true, cam: true, vscope: 'team' });
+    const mediaMsg = await c1.wait((m) => m.t === 'media' && m.states?.[0]?.mic === true);
+    assert.equal(mediaMsg.states[0].cam, true);
+    assert.equal(mediaMsg.states[0].vscope, 'team');
+
+    c1.msgs.length = 0;
+    c0.send({ t: 'rtc', to: 1, data: { description: { type: 'offer', sdp: 'v=0-mock-sdp' } } });
+    const rtcMsg = await c1.wait((m) => m.t === 'rtc' && m.from === 0);
+    assert.equal(rtcMsg.data.description.sdp, 'v=0-mock-sdp');
+
+    c0.ws.close();
+    c1.ws.close();
+    c2.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Rift Colosseum: challenges, live spectators, custom rule referee fouls, and voluntary SOS reinforcements', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 6000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const fA = mkClient();
+    const fB = mkClient();
+    const spec = mkClient();
+    await Promise.all([fA.open, fB.open, spec.open]);
+
+    fA.send({ t: 'arena', name: 'sergio', priv: true, autoAi: false, initialAis: 0 });
+    const jA = await fA.wait((m) => m.t === 'joined' && m.mode === 'arena');
+    const code = jA.code;
+
+    fB.send({ t: 'join', name: 'rival', code });
+    const jB = await fB.wait((m) => m.t === 'joined' && m.mode === 'arena');
+
+    spec.send({ t: 'join', name: 'viewer', code });
+    await spec.wait((m) => m.t === 'joined' && m.mode === 'arena');
+
+    // 1. Sergio challenges Rival with Custom Rules (noExplosives) and a 60s Match Timer!
+    fB.msgs.length = 0;
+    fA.send({
+      t: 'challenge',
+      targetId: jB.actorId,
+      map: 'neon',
+      goal: 5,
+      timeLimit: 60,
+      rules: { noExplosives: true },
+    });
+    const chArena = await fB.wait((m) => m.t === 'arena' && m.challenge?.targetId === jB.actorId);
+    assert.equal(chArena.challenge.timeLimit, 60);
+    assert.equal(chArena.challenge.rules.noExplosives, true);
+
+    // 2. Rival accepts -> Viewer automatically moves to Spectator mode (`spectating: true, slot: -1`) and receives live snapshots!
+    spec.msgs.length = 0;
+    fA.msgs.length = 0;
+    fB.send({ t: 'challenge_reply', accept: true });
+
+    const specRole = await spec.wait((m) => m.t === 'arena_role');
+    assert.equal(specRole.spectating, true);
+    assert.equal(specRole.slot, -1);
+
+    // Speed up countdown on server hub for deterministic fast test
+    const hub = srv.lobby.rooms.get(code);
+    hub.timer = 0.01;
+    await fA.wait((m) => m.t === 'arena' && m.st === 'playing');
+    const liveSnap = await spec.wait((m) => m.t === 's' && Array.isArray(m.p));
+    assert.ok(liveSnap.p[0] && liveSnap.p[1], 'spectator receives real-time 60 Hz snapshots of both fighters');
+
+    // 3. Referee enforces `noExplosives`: attempting BTN.ALT grenade triggers a Foul shock & blocks grenade!
+    fA.msgs.length = 0;
+    fA.send({ t: 'i', l: [[1, BTN.ALT, 0, W.pistol, hub.game.tick, 0]] });
+    const foul = await fA.wait((m) => m.t === 'foul' && m.rule === 'noExplosives');
+    assert.equal(foul.name, 'SERGIO');
+    assert.equal(hub.game.projs.length, 0, 'illegal grenade was blocked by Referee');
+
+    // 4. Mid-match SOS ("Appel à l'aide"): Sergio calls SOS, Spectator Viewer chooses to jump in and help!
+    spec.msgs.length = 0;
+    fA.send({ t: 'sos' });
+    const sosArena = await spec.wait((m) => m.t === 'arena' && m.sos?.callerName === 'SERGIO');
+    assert.equal(sosArena.sos.team, 0);
+
+    spec.msgs.length = 0;
+    spec.send({ t: 'sos_reply', accept: true });
+    const promoted = await spec.wait((m) => m.t === 'arena_role' && m.spectating === false);
+    assert.ok(promoted.slot >= 2, 'spectator promoted into live arena slot');
+    assert.equal(promoted.team, 0, 'helper joined caller team');
+    await fA.wait((m) => m.t === 'sos_joined' && m.helperName === 'VIEWER');
+
+    fA.ws.close();
+    fB.ws.close();
+    spec.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Autonomous AI Citizens & external WebSocket AI Agents play like humans (initiate/accept duels, chat, observe, fight)', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 6000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  let extAgent = null;
+  try {
+    const human = mkClient();
+    await human.open;
+
+    human.send({ t: 'arena', name: 'sergio', priv: true, autoAi: true, initialAis: 2 });
+    const joined = await human.wait((m) => m.t === 'joined' && m.mode === 'arena');
+    const hub = srv.lobby.rooms.get(joined.code);
+
+    // 1. Connect external AI agent script over WebSocket into the exact same Colosseum!
+    extAgent = launchAutonomousAgent({
+      url: `ws://127.0.0.1:${srv.port}/ws`,
+      name: 'OMEGA-IA',
+      room: joined.code,
+    });
+    const agentGreet = await human.wait((m) => m.t === 'chat' && m.name === 'OMEGAIA');
+    assert.ok(agentGreet.text.includes('ONLINE'));
+
+    // 2. Human challenges external AI agent -> external AI agent autonomously accepts over WebSocket!
+    const arenaInfo = hub.info();
+    const omegaActor = arenaInfo.roster.find((r) => r.name === 'OMEGAIA');
+    assert.ok(omegaActor, 'external AI agent appears in Colosseum roster');
+
+    human.msgs.length = 0;
+    human.send({
+      t: 'challenge',
+      targetId: omegaActor.id,
+      map: 'neon',
+      goal: 3,
+      timeLimit: 60,
+      rules: { noJetpack: true },
+    });
+    const started = await human.wait((m) => m.t === 'arena' && m.st === 'countdown');
+    assert.equal(started.rules.noJetpack, true);
+
+    // 3. Verify built-in Autonomous AI Citizens also initiate challenges on their own when idle!
+    hub.returnToOpenRing();
+    human.msgs.length = 0;
+    hub.idleChallengeCd = 0.05;
+    hub.stepSocialAi(0.2);
+    const aiProposed = await human.wait((m) => m.t === 'arena' && Boolean(m.challenge));
+    assert.ok(aiProposed.challenge.fromId.startsWith('ai'), 'built-in AI citizen initiated a challenge autonomously');
+
+    human.ws.close();
+  } finally {
+    extAgent?.close();
+    await srv.close();
+  }
+});
+
+test('Match Timer resolves winner at 0:00 and triggers Sudden Death on a tie', () => {
+  const room = new Room('TIME', { mode: 'duel', timeLimit: 60, goal: 5 });
+  const fakeWs = { readyState: 3, send() {} };
+  const c0 = { id: 1, ws: fakeWs, name: 'A', slot: -1, rtt: 10 };
+  const c1 = { id: 2, ws: fakeWs, name: 'B', slot: -1, rtt: 10 };
+  room.join(c0);
+  room.join(c1);
+
+  // Advance past countdown into playing
+  room.state = 'playing';
+  room.applyRules();
+  assert.equal(room.matchTimer, 60);
+
+  // 1. Tied 1-1 when timer hits 0 -> enters Sudden Death, then next kill wins immediately!
+  room.scores = [1, 1];
+  room.matchTimer = 0.01;
+  room.tick();
+  assert.equal(room.state, 'playing');
+  assert.equal(room.suddenDeath, true, 'tie at 0:00 triggers Sudden Death');
+
+  room.onKill(1, 0); // P0 scores 2-1 (below goal 5, but Sudden Death!)
+  assert.equal(room.state, 'over');
+  assert.equal(room.winner, 0, 'next point in Sudden Death wins immediately');
+});
+
+test('Autonomous AI Citizens fight to completion on open maps (neon) and underground bunker maps (mine + noExplosives)', () => {
+  // 1. Open vertical map: NEON CITY
+  const neonHub = new ArenaHub('AINN', { map: 'neon', initialAis: 2, autoAi: false });
+  assert.equal(neonHub.startAiExhibition({ map: 'neon', goal: 3, timeLimit: 120 }), true);
+  for (let i = 0; i < 60 * 55 && neonHub.state !== 'over'; i++) neonHub.tick();
+  assert.equal(neonHub.state, 'over', 'AI-vs-AI duel on NEON CITY completes decisively');
+  assert.ok(Math.max(...neonHub.teamScores) >= 3, 'winner reached goal of 3 on NEON CITY');
+
+  // 2. Sealed underground bunkers + MAT_METAL shields + SANS EXPLOSIFS rule: THE MINE
+  const mineHub = new ArenaHub('AIMN', { map: 'mine', initialAis: 2, autoAi: false });
+  assert.equal(
+    mineHub.startAiExhibition({ map: 'mine', goal: 2, timeLimit: 120, rules: { noExplosives: true } }),
+    true,
+  );
+  for (let i = 0; i < 60 * 90 && mineHub.state !== 'over'; i++) mineHub.tick();
+  assert.ok(
+    mineHub.teamScores[0] + mineHub.teamScores[1] >= 1,
+    `AIs escaped underground bunkers on THE MINE and scored kills (got ${mineHub.teamScores.join('-')})`,
+  );
+});
+
+test('Colosseum keeps human in active ring (never auto-hijacked by AI-vs-AI) and supports voluntary AI-vs-AI duel + Stop & Play', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const mkClient = () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+    const c = { ws, msgs: [], waiters: [] };
+    ws.on('message', (d) => {
+      const m = JSON.parse(d.toString());
+      c.msgs.push(m);
+      c.waiters = c.waiters.filter((w) => !w(m));
+    });
+    c.send = (m) => ws.send(JSON.stringify(m));
+    c.wait = (pred, ms = 5000) =>
+      new Promise((res, rej) => {
+        const found = c.msgs.find(pred);
+        if (found) return res(found);
+        const to = setTimeout(() => rej(new Error('timeout')), ms);
+        c.waiters.push((m) => {
+          if (!pred(m)) return false;
+          clearTimeout(to);
+          res(m);
+          return true;
+        });
+      });
+    c.open = new Promise((r) => ws.on('open', r));
+    return c;
+  };
+
+  try {
+    const human = mkClient();
+    await human.open;
+
+    human.send({ t: 'arena', name: 'sergio', priv: true, autoAi: true, initialAis: 3 });
+    const joined = await human.wait((m) => m.t === 'joined' && m.mode === 'arena');
+    assert.ok(joined.slot >= 0 && !joined.spectating, 'human spawns directly in the active Open Ring');
+
+    const hub = srv.lobby.rooms.get(joined.code);
+    const humanActor = hub.actors.get(joined.actorId);
+
+    // 1. Even across repeated autonomous social ticks, AIs only challenge the human (withchatKey) and NEVER eject them!
+    for (let k = 0; k < 6; k++) {
+      hub.pendingChallenge = null;
+      hub.idleChallengeCd = 0.01;
+      hub.stepSocialAi(0.2);
+      assert.equal(hub.state, 'idle', 'AIs never start an unrequested match behind the human player');
+      assert.ok(humanActor.slot >= 0, 'human keeps active fighter slot and keyboard control');
+      if (hub.pendingChallenge) {
+        assert.equal(hub.pendingChallenge.targetId, humanActor.id, 'spontaneous AI challenge targets the human');
+      }
+    }
+
+    const aiChat = await human.wait((m) => m.t === 'chat' && m.chatKey === 'aiChatChallenge');
+    assert.ok(aiChat, 'AI challenge chat carries i18n chatKey for FR/EN client translation');
+
+    // 2. Human voluntarily clicks "⚔ AI VS AI DUEL" -> enters Spectator Mode watching 2 AIs fight!
+    hub.pendingChallenge = null;
+    human.msgs.length = 0;
+    human.send({ t: 'arena_ai_duel', map: 'neon', goal: 3, timeLimit: 90, rules: { noExplosives: true } });
+    const specRole = await human.wait((m) => m.t === 'arena_role' && m.spectating === true);
+    assert.equal(specRole.slot, -1);
+    assert.equal(hub.state, 'countdown');
+
+    // 3. Human clicks "⏹ STOP & PLAY" (`arena_stop`) -> AI exhibition stops and human reclaims active fighter slot!
+    human.msgs.length = 0;
+    human.send({ t: 'arena_stop' });
+    const activeRole = await human.wait((m) => m.t === 'arena_role' && m.spectating === false);
+    assert.ok(activeRole.slot >= 0, 'human immediately reclaims an active fighter slot in the ring');
+    assert.equal(hub.state, 'idle');
+
+    // 4. Verify `#arena-box` CSS positioning + FR strings are served properly
+    const [cssRes, htmlRes, i18nRes] = await Promise.all([
+      fetch(`http://127.0.0.1:${srv.port}/style.css`),
+      fetch(`http://127.0.0.1:${srv.port}/`),
+      fetch(`http://127.0.0.1:${srv.port}/js/i18n.js`),
+    ]);
+    const [css, html, i18n] = await Promise.all([cssRes.text(), htmlRes.text(), i18nRes.text()]);
+    assert.ok(css.includes('#arena-box {') || css.includes('#arena-box\n'), '#arena-box inherits waitbox layout');
+    assert.ok(css.includes('#arena-box .chip'), '#arena-box chips use compact HUD sizing');
+    assert.ok(html.includes('id="btn-arena-aiduel"'), 'AI-vs-AI duel button present in HUD');
+    assert.ok(html.includes('id="btn-spec-stop"'), 'Spectator Stop & Play button present in HUD');
+    assert.ok(i18n.includes('REPRENDRE LA MAIN'), 'French translation for Stop & Play present');
+
+    human.ws.close();
+  } finally {
+    await srv.close();
+  }
+});
+
+test('Mobile & Tablet Twin-Stick Touch Controls: serves touch.js, HTML controls, settings toggle, and EN/FR i18n', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  try {
+    const [htmlRes, touchRes, inputRes, cssRes, i18nRes] = await Promise.all([
+      fetch(`http://127.0.0.1:${srv.port}/`),
+      fetch(`http://127.0.0.1:${srv.port}/js/touch.js`),
+      fetch(`http://127.0.0.1:${srv.port}/js/input.js`),
+      fetch(`http://127.0.0.1:${srv.port}/style.css`),
+      fetch(`http://127.0.0.1:${srv.port}/js/i18n.js`),
+    ]);
+    assert.equal(htmlRes.status, 200);
+    assert.equal(touchRes.status, 200);
+    assert.equal(inputRes.status, 200);
+    assert.ok((touchRes.headers.get('cache-control') || '').includes('no-store'));
+
+    const [html, touchSrc, inputSrc, css, i18n] = await Promise.all([
+      htmlRes.text(),
+      touchRes.text(),
+      inputRes.text(),
+      cssRes.text(),
+      i18nRes.text(),
+    ]);
+
+    for (const id of [
+      'touch-controls',
+      'touch-move-zone',
+      'touch-aim-zone',
+      'touch-jump',
+      'touch-fire',
+      'touch-alt',
+      'touch-melee',
+      'touch-build',
+      'touch-style',
+      'touch-swap',
+      'btn-touch',
+      'btn-hud-fs',
+      'btn-menu-fs',
+    ]) {
+      assert.ok(html.includes(`id="${id}"`), `HTML contains #${id}`);
+    }
+    assert.ok(html.includes('viewport-fit=cover'), 'mobile viewport supports safe-area notches');
+    assert.ok(html.includes('"/js/touch.js"'), 'importmap includes /js/touch.js');
+    assert.ok(touchSrc.includes('createTouchControls'), 'touch.js exports createTouchControls');
+    assert.ok(inputSrc.includes('syncTouchCrosshair'), 'Input supports orbital twin-stick crosshair');
+    assert.ok(css.includes('.touch-controls'), 'style.css defines touch-controls layout');
+    assert.ok(i18n.includes('CONTRÔLES TACTILES') && i18n.includes('TOUCH CONTROLS'), 'EN/FR i18n strings present');
+  } finally {
+    await srv.close();
+  }
+});
+
+
+
+
+

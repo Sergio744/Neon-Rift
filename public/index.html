@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Neon Rift</title>
     <meta name="description" content="Neon Rift — Free open-source community stickman shooter on fully destructible falling-sand pixel maps: 1v1 duels, group rooms of up to 8 (FFA or teams), solo and co-op survival. Inspired by Stick Duel." />
     <meta property="og:title" content="Neon Rift — Open-Source Destructible Stickman Shooter" />
@@ -11,7 +13,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/style.css?v=7" />
+    <script type="importmap">
+      {
+        "imports": {
+          "/js/main.js": "/js/main.js?v=7",
+          "/js/i18n.js": "/js/i18n.js?v=7",
+          "/js/comms.js": "/js/comms.js?v=7",
+          "/js/game.js": "/js/game.js?v=7",
+          "/js/input.js": "/js/input.js?v=7",
+          "/js/touch.js": "/js/touch.js?v=7",
+          "/js/ui/arena.js": "/js/ui/arena.js?v=7",
+          "/js/ui/room.js": "/js/ui/room.js?v=7",
+          "/js/ui/controls.js": "/js/ui/controls.js?v=7",
+          "/js/ui/hud.js": "/js/ui/hud.js?v=7",
+          "/shared/rules.js": "/shared/rules.js?v=7"
+        }
+      }
+    </script>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23120d29'/%3E%3Crect x='2' y='1' width='2' height='14' fill='%23ff4d9d' opacity='0.45'/%3E%3Crect x='6' y='2' width='4' height='4' fill='%233ee6ff'/%3E%3Crect x='7' y='6' width='2' height='5' fill='%233ee6ff'/%3E%3Crect x='5' y='11' width='2' height='3' fill='%233ee6ff'/%3E%3Crect x='9' y='11' width='2' height='3' fill='%233ee6ff'/%3E%3Crect x='9' y='7' width='5' height='2' fill='%23ff4d9d'/%3E%3C/svg%3E"
@@ -19,17 +38,99 @@
   </head>
   <body>
     <div id="stage">
-      <canvas id="view" width="800" height="450"></canvas>
+      <canvas id="view" width="800" height="450" tabindex="-1"></canvas>
 
       <div id="hud" class="hidden">
         <div id="vignette"></div>
         <div id="dmgdir"></div>
+        <div id="hud-actions">
+          <button class="hud-btn" id="btn-hud-pause" type="button" title="ESC">
+            <i class="hb-pause" aria-hidden="true"></i>
+            <span data-i18n="hudPause">PAUSE</span>
+          </button>
+          <button class="hud-btn menu-btn" id="btn-hud-menu" type="button">
+            <i class="hb-menu" aria-hidden="true"></i>
+            <span data-i18n="hudMenu">MAIN MENU</span>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-chat" type="button" title="ENTER">
+            <span data-i18n="hudChat">CHAT</span>
+            <i id="chat-unread" class="unread-dot hidden"></i>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-mic" type="button">
+            <i class="hb-dot" aria-hidden="true"></i>
+            <span data-i18n="hudMic">MIC</span>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-cam" type="button">
+            <i class="hb-dot" aria-hidden="true"></i>
+            <span data-i18n="hudCam">CAM</span>
+          </button>
+          <button class="hud-btn comms-btn hidden" id="btn-hud-vscope" type="button" data-i18n="voiceAll">VOICE: ALL</button>
+          <button class="hud-btn sos-btn hidden" id="btn-hud-sos" type="button" title="Y">
+            <span data-i18n="sosBtn">SOS HELP</span>
+          </button>
+          <button class="hud-btn fs-btn" id="btn-hud-fs" type="button" title="Fullscreen">
+            <span>⛶</span>
+          </button>
+        </div>
+        <div id="holo-cams" class="hidden"></div>
+        <div id="active-rules-bar" class="hidden"></div>
+        <div id="challenge-alert" class="arena-alert hidden" style="pointer-events:auto"></div>
+        <div id="sos-alert" class="arena-alert sos hidden" style="pointer-events:auto"></div>
+        <div id="spec-bar" class="spec-bar hidden" style="pointer-events:auto">
+          <span class="spec-tag" data-i18n="spectatingLabel">SPECTATING</span>
+          <button class="btn small" id="btn-spec-prev" type="button">◄</button>
+          <b id="spec-target-name">AUTO CAM</b>
+          <button class="btn small" id="btn-spec-next" type="button">►</button>
+          <button class="btn small primary hidden" id="btn-spec-stop" type="button" data-i18n="stopAiBtn">⏹ STOP &amp; PLAY</button>
+        </div>
+        <div id="arena-box" class="waitbox arena-box hidden" style="pointer-events:auto">
+          <div class="w-head">
+            <div class="w-title" data-i18n="arenaHubTitle">RIFT COLOSSEUM</div>
+            <b class="w-count" id="arena-count">0/12</b>
+            <button class="btn small w-fold" id="btn-arena-fold" type="button" aria-expanded="true" data-i18n="hide">HIDE</button>
+          </div>
+          <div class="w-code">
+            <span><span data-i18n="roomLabel">ROOM</span> <b id="arena-code">----</b></span>
+            <button class="btn small" id="btn-arena-copy" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
+          </div>
+          <div class="ar-actions" id="arena-top-actions">
+            <button class="btn small bot-add" id="btn-arena-addai" type="button" data-i18n="addAiCitizen">+ AUTONOMOUS AI</button>
+            <button class="btn small squad-up" id="btn-arena-aiduel" type="button" data-i18n="aiDuelBtn">⚔ AI VS AI DUEL</button>
+          </div>
+          <div id="arena-roster" class="arena-roster"></div>
+          <div id="arena-cfg" class="w-settings">
+            <div id="ar-maps"></div>
+            <div id="ar-goal"></div>
+            <div id="ar-timer"></div>
+            <div id="ar-rules"></div>
+          </div>
+        </div>
+        <div id="chat-panel" class="hidden">
+          <div id="squad-orders" class="squad-orders hidden">
+            <span class="dim"><kbd>G</kbd></span>
+            <button type="button" class="chip-mini" data-order="follow" data-i18n="orderFollow">FOLLOW ME</button>
+            <button type="button" class="chip-mini" data-order="attack" data-i18n="orderAttack">ATTACK</button>
+            <button type="button" class="chip-mini" data-order="hold" data-i18n="orderHold">HOLD ZONE</button>
+          </div>
+          <div id="chat-log"></div>
+          <div id="chat-quick" class="chat-quick hidden">
+            <button type="button" class="chip-mini" data-quick="gg" data-i18n="quickGg">GG!</button>
+            <button type="button" class="chip-mini" data-quick="nice" data-i18n="quickNice">NICE SHOT!</button>
+            <button type="button" class="chip-mini" data-quick="group" data-i18n="quickGroup">ON ME!</button>
+            <button type="button" class="chip-mini" data-quick="crate" data-i18n="quickCrate">CRATE HERE!</button>
+          </div>
+          <form id="chat-form" class="chat-form hidden" autocomplete="off">
+            <button type="button" id="btn-chat-scope" class="chat-scope">ALL</button>
+            <input id="chat-input" maxlength="140" autocomplete="off" spellcheck="false" placeholder="MESSAGE (TAB: ALL/TEAM)..." data-i18n-placeholder="chatPlaceholder" />
+          </form>
+        </div>
         <div id="callout" class="hidden"></div>
         <div id="recap" class="hidden"></div>
         <div id="scoreboard">
           <div class="side s0"><span class="nm">P1</span><b class="sc">0</b></div>
           <div class="mid">
             <span id="goal-text">FIRST TO 5</span>
+            <b id="timer-text" class="timer-text hidden">2:00</b>
             <span id="map-text"></span>
           </div>
           <div class="side s1"><b class="sc">0</b><span class="nm">P2</span></div>
@@ -66,10 +167,17 @@
             <button class="btn small" id="btn-copy" type="button" data-i18n="copyInvite">COPY INVITE LINK</button>
           </div>
           <div class="w-players" id="w-players"></div>
+          <div class="w-squad-actions hidden" id="w-squad-actions">
+            <button class="btn small bot-add" id="btn-duel-bot" type="button" data-i18n="addBotDuel">+ BOT (1V1)</button>
+            <button class="btn small squad-up" id="btn-form-squads" type="button" data-i18n="formSquads">FORM SQUADS (TEAMS + BOTS)</button>
+          </div>
           <div class="w-settings">
             <div id="w-mode"></div>
+            <div id="w-botskill" class="hidden"></div>
             <div id="w-maps"></div>
             <div id="w-goal"></div>
+            <div id="w-timer"></div>
+            <div id="w-rules"></div>
             <div id="w-loadout"></div>
             <div id="w-pool"></div>
           </div>
@@ -134,6 +242,7 @@
       <div id="menu" class="overlay">
         <div class="panel menu-panel">
           <div class="menu-top">
+            <button class="lang-btn" id="btn-menu-fs" type="button" title="Fullscreen">⛶ <span data-i18n="fullscreen">FULLSCREEN</span></button>
             <button class="lang-btn" id="btn-lang" type="button" title="Switch language / Changer de langue">EN ▾ FR</button>
           </div>
           <canvas id="logo" width="200" height="40"></canvas>
@@ -159,6 +268,9 @@
               </button>
               <button class="mode-card group" id="btn-group" type="button">
                 <b data-i18n="groupTitle">GROUP ROOM</b><span data-i18n="groupDesc">2 TO 8 PLAYERS - FREE FOR ALL OR TEAMS</span>
+              </button>
+              <button class="mode-card arena-card" id="btn-arena" type="button">
+                <b data-i18n="arenaTitle">RIFT ARENA (HUMANS &amp; AI)</b><span data-i18n="arenaDesc">CHALLENGE ANYONE, CUSTOM RULES, SPECTATORS &amp; SOS BACKUP</span>
               </button>
             </div>
           </div>
@@ -198,6 +310,7 @@
           <div class="settings">
             <button class="toggle" id="btn-mute" type="button"><span data-i18n="sound">SOUND</span><b>ON</b></button>
             <button class="toggle" id="btn-shake" type="button"><span data-i18n="screenShake">SCREEN SHAKE</span><b>ON</b></button>
+            <button class="toggle" id="btn-touch" type="button"><span data-i18n="touchControls">TOUCH CONTROLS</span><b>AUTO</b></button>
             <button class="toggle" id="btn-help" type="button"><span data-i18n="controlsPanel">CONTROLS PANEL</span><b>OFF</b></button>
           </div>
           <button class="btn wide danger" id="btn-leave" type="button" data-i18n="leaveMatch">LEAVE MATCH</button>
@@ -247,6 +360,58 @@
       <div id="toast"></div>
     </div>
 
-    <script type="module" src="/js/main.js"></script>
+    <div id="rotate-banner" class="rotate-banner hidden">
+      <span data-i18n="rotateHint">ROTATE TO LANDSCAPE OR TAP ⛶ FOR FULL COMFORT</span>
+      <button type="button" id="btn-rotate-close" aria-label="Close">×</button>
+    </div>
+
+    <div id="touch-controls" class="touch-controls hidden" aria-label="Mobile Touch Controls">
+      <div class="touch-side left">
+        <button type="button" id="touch-jump" class="t-btn jump">
+          <b>▲</b><small data-i18n="touchJump">JUMP / JET</small>
+        </button>
+        <div id="touch-move-zone" class="touch-zone">
+          <div id="touch-move-base" class="t-base move">
+            <span class="t-hint" data-i18n="touchMoveHint">MOVE</span>
+            <div id="touch-move-nub" class="t-nub"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="touch-side right">
+        <div class="touch-util-row">
+          <button type="button" id="touch-style" class="t-btn mini style hidden">
+            <small data-i18n="touchStyle">STYLE</small>
+          </button>
+          <button type="button" id="touch-build" class="t-btn mini build">
+            <b>B</b><small data-i18n="touchBuild">BUILD</small>
+          </button>
+          <button type="button" id="touch-swap" class="t-btn mini swap">
+            <b>↻</b><small data-i18n="touchSwap">WEAPON</small>
+          </button>
+        </div>
+        <div class="touch-combat-row">
+          <div class="touch-arc">
+            <button type="button" id="touch-alt" class="t-btn alt">
+              <b>💣</b><small data-i18n="touchAlt">ALT</small>
+            </button>
+            <button type="button" id="touch-melee" class="t-btn melee">
+              <b>👊</b><small data-i18n="touchMelee">SHOVE</small>
+            </button>
+            <button type="button" id="touch-fire" class="t-btn fire">
+              <b>🔥</b><small data-i18n="touchFire">FIRE</small>
+            </button>
+          </div>
+          <div id="touch-aim-zone" class="touch-zone">
+            <div id="touch-aim-base" class="t-base aim">
+              <span class="t-hint" data-i18n="touchAimHint">AIM &amp; FIRE</span>
+              <div id="touch-aim-nub" class="t-nub"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/js/main.js?v=7"></script>
   </body>
 </html>

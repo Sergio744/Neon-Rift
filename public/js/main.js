@@ -4,13 +4,16 @@ import { TEAM_NAMES } from '/shared/modes.js';
 import { ENEMIES, MAX_HUMANS, SURVIVAL_SLOTS } from '/shared/survival.js';
 import { POOLS, POOL_IDS } from '/shared/weapons.js';
 import { Sfx } from './audio.js';
+import { createComms } from './comms.js';
 import { Fx, drawText } from './fx.js';
 import { ClientGame } from './game.js';
 import { applyDomI18n, onLangChange, toggleLang, tr } from './i18n.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { SoloServer } from './solo.js';
+import { createTouchControls } from './touch.js';
 import { chips, poolPicker, settingRow } from './ui/controls.js';
+import { createArenaUi } from './ui/arena.js';
 import { createFeel } from './ui/feel.js';
 import { createHud } from './ui/hud.js';
 import { createRoomUi, isGroup, ranking, sizeTag, slotColor } from './ui/room.js';
@@ -26,6 +29,20 @@ const fx = new Fx();
 const sfx = new Sfx();
 const game = new ClientGame({ net, input, fx, sfx });
 const solo = new SoloServer(game, { onSnapshot: (snap) => survivalSnapshot(snap) });
+const touch = createTouchControls({
+  input,
+  game,
+  sfx,
+  isPlayable: () =>
+    Boolean(
+      game.active &&
+        mode !== 'menu' &&
+        !game.spectating &&
+        ui.pause.classList.contains('hidden') &&
+        ui.over.classList.contains('hidden') &&
+        ui.soloOver.classList.contains('hidden'),
+    ),
+});
 
 const ui = {
   menu: $('#menu'),
@@ -64,6 +81,7 @@ let sv = null; // last survival state, solo or co-op
 let survNextMap = 'neon';
 let crewNames = [];
 let room = null;
+let arenaState = null;
 let parkedRoom = null; // { code, mode } while a private room waits in the background
 let alertTimer = null;
 let lastState = '';
@@ -134,7 +152,7 @@ function copyText(text) {
 }
 
 function copyInvite(e) {
-  const code = room?.code ?? coop?.code ?? parkedRoom?.code;
+  const code = room?.code ?? coop?.code ?? arenaState?.code ?? parkedRoom?.code;
   if (!code) return;
   copyText(inviteLink(code));
   sfx.play('switch');
@@ -226,7 +244,21 @@ $('#btn-group').addEventListener('click', () => {
   sfx.unlock();
   parkedRoom = null;
   renderParkedBar();
-  net.send({ t: 'create', name: playerName(), mode: 'ffa' });
+  net.send({ t: 'create', name: playerName(), mode: 'teams' });
+});
+$('#btn-arena')?.addEventListener('click', () => {
+  sfx.unlock();
+  parkedRoom = null;
+  renderParkedBar();
+  net.send({ t: 'arena', name: playerName() });
+});
+$('#btn-duel-bot')?.addEventListener('click', () => {
+  sfx.unlock();
+  net.send({ t: 'addbot' });
+});
+$('#btn-form-squads')?.addEventListener('click', () => {
+  sfx.unlock();
+  net.send({ t: 'squads', mode: 'teams' });
 });
 $('#btn-coop').addEventListener('click', () => {
   sfx.unlock();
@@ -305,14 +337,16 @@ function enterSurvival(m) {
   show(ui.hud, true);
   show(ui.scoreboard, false);
   show(ui.wavebar, true);
+  comms.updateHudButtons();
   show($('#btn-copy2'), m === 'coop');
   show($('#so-best-row'), m === 'solo');
-  $('#pause-note').textContent = m === 'solo' ? 'THE GAME IS PAUSED' : 'THE RUN KEEPS GOING';
-  $('#btn-leave').textContent = 'QUIT TO MENU';
-  $('#btn-retry').textContent = m === 'solo' ? 'TRY AGAIN' : 'PLAY AGAIN';
+  $('#pause-note').textContent = tr(m === 'solo' ? 'soloPaused' : 'coopPaused');
+  $('#btn-leave').textContent = tr('quitMenu');
+  $('#btn-retry').textContent = tr(m === 'solo' ? 'tryAgain' : 'playAgain');
   ui.killfeed.textContent = '';
   input.enabled = true;
   input.releaseAll();
+  canvas.focus({ preventScroll: true });
   hud.reset();
   feel.reset();
   helpOnStart();
@@ -546,6 +580,8 @@ function applyCoop(msg) {
     input.releaseAll();
     flash(tr('getReady'), game.mapName || '', 1300);
   }
+  comms.syncPeersWithRoom();
+  comms.updateHudButtons();
 }
 
 if (new URLSearchParams(location.search).has('debug')) window.sd = { game, solo };
@@ -570,6 +606,7 @@ function setPaused(on) {
   show(ui.pause, on);
   input.enabled = !on && ui.over.classList.contains('hidden') && ui.soloOver.classList.contains('hidden');
   if (on) input.releaseAll();
+  else canvas.focus({ preventScroll: true });
   if (solo.active) solo.paused = on;
 }
 
@@ -593,10 +630,18 @@ function toggleLabel(id, on) {
   b.textContent = on ? 'ON' : 'OFF';
   b.classList.toggle('off', !on);
 }
+function updateTouchPrefLabel() {
+  const b = $('#btn-touch b');
+  if (!b) return;
+  b.textContent = touch.prefLabel();
+  b.classList.toggle('off', touch.getPref() === 'off');
+}
+
 function applyPrefs() {
   fx.shakeMul = prefs.shake ? 1 : 0;
   toggleLabel('#btn-shake', prefs.shake);
   toggleLabel('#btn-help', !ui.help.classList.contains('hidden'));
+  updateTouchPrefLabel();
 }
 function setHelp(on, remember = true) {
   ui.help.classList.toggle('hidden', !on);
@@ -604,8 +649,12 @@ function setHelp(on, remember = true) {
   savePrefs();
   applyPrefs();
 }
-// The controls panel shows on your very first match, then stays tucked away unless you want it.
+// The controls panel shows on your very first desktop match; on touch devices virtual pads are self-explanatory.
 function helpOnStart() {
+  if (touch.isEnabled()) {
+    setHelp(false, false);
+    return;
+  }
   if (!prefs.helpSeen) {
     prefs.helpSeen = true;
     setHelp(true, false);
@@ -616,6 +665,18 @@ $('#btn-shake').addEventListener('click', () => {
   prefs.shake = !prefs.shake;
   savePrefs();
   applyPrefs();
+});
+$('#btn-touch')?.addEventListener('click', () => {
+  touch.cyclePref();
+  updateTouchPrefLabel();
+});
+$('#btn-hud-fs')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  touch.toggleFullscreen();
+});
+$('#btn-menu-fs')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  touch.toggleFullscreen();
 });
 $('#btn-help').addEventListener('click', () => setHelp(ui.help.classList.contains('hidden')));
 applyPrefs();
@@ -638,12 +699,17 @@ function leave() {
 function toMenu({ keepParked = false } = {}) {
   if (solo.active) solo.stop();
   if (!keepParked) parkedRoom = null;
+  activeCommsCode = null;
+  comms.resetAll();
+  arenaUi?.hideAll();
   mode = 'menu';
   room = null;
+  arenaState = null;
   coop = null;
   sv = null;
   clearTimeout(centerTimer);
   game.leave();
+  show($('#bottom'), true);
   game.net = net;
   game.team = [0, 1];
   game.colors = PLAYER_COLORS.slice();
@@ -658,7 +724,7 @@ function toMenu({ keepParked = false } = {}) {
   show(ui.wavebar, false);
   show($('#btn-copy2'), true);
   show($('#btn-park2'), false);
-  $('#pause-note').textContent = 'THE MATCH KEEPS RUNNING';
+  $('#pause-note').textContent = tr('matchPaused');
   $('#btn-leave').textContent = tr('leaveMatch');
   center('', '', false);
   show(ui.hud, false);
@@ -671,7 +737,22 @@ function toMenu({ keepParked = false } = {}) {
   renderParkedBar();
 }
 
-$('#btn-resume').addEventListener('click', () => setPaused(false));
+$('#btn-resume').addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  setPaused(false);
+});
+$('#btn-hud-pause')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  sfx.unlock();
+  if (!game.active) return;
+  if (!ui.over.classList.contains('hidden') || !ui.soloOver.classList.contains('hidden')) return;
+  setPaused(ui.pause.classList.contains('hidden'));
+});
+$('#btn-hud-menu')?.addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  sfx.unlock();
+  leave();
+});
 $('#btn-copy2').addEventListener('click', copyInvite);
 $('#btn-park2').addEventListener('click', parkCurrentRoom);
 $('#btn-mute').addEventListener('click', () => {
@@ -704,11 +785,29 @@ updateMuteLabel();
 
 const survivalMode = () => mode === 'solo' || mode === 'coop';
 // The kill feed says YOU everywhere but in a duel, where both names are on the scoreboard.
-const hud = createHud({ game, sfx, showYou: () => survivalMode() || isGroup(room) });
+const hud = createHud({ game, sfx, showYou: () => survivalMode() || mode === 'arena' || isGroup(room) });
 const roomUi = createRoomUi({
   game, net, maps: () => maps, pools: () => poolPresets, onCopy: copyInvite, onPark: parkCurrentRoom,
 });
+const arenaUi = createArenaUi({
+  game, net, maps: () => maps, sfx, onCopy: copyInvite,
+});
 const feel = createFeel({ game, sfx, survival: survivalMode });
+let activeCommsCode = null;
+const comms = createComms({
+  game,
+  net,
+  sfx,
+  toast,
+  getContext: () => ({
+    online: mode === 'room' || mode === 'coop' || mode === 'arena',
+    mode: mode === 'arena' ? 'room' : mode,
+    room: mode === 'arena' ? arenaState : room,
+    coop,
+    mySlot: game.slot,
+  }),
+});
+game.bubbleFor = (slot) => comms.bubbleFor(slot);
 const SOLO_DEATH_RULE = {
   duel: 'THAT DEATH SCORES FOR YOUR OPPONENT',
   ffa: 'DYING ON YOUR OWN COSTS 1 POINT',
@@ -781,6 +880,8 @@ function applyRoom(msg) {
   const waiting = msg.st === 'waiting';
   show(ui.waiting, waiting);
   if (waiting) roomUi.waiting(msg);
+  comms.syncPeersWithRoom();
+  comms.updateHudButtons();
 
   if (msg.st === 'countdown' && (!prev || prev.st !== 'countdown')) {
     countdownEnd = performance.now() + msg.timer * 1000;
@@ -828,11 +929,61 @@ function renderOver(msg) {
   });
 }
 
+function applyArena(msg) {
+  const prev = arenaState;
+  arenaState = msg;
+  game.roomState = msg.st === 'idle' ? 'waiting' : msg.st;
+  game.names = msg.names.map((n, i) => n || `P${i + 1}`);
+  game.colors = msg.names.map((_, s) => slotColor(msg, s));
+  game.team = msg.names.map((_, s) => (msg.st !== 'idle' && msg.teams[s] >= 0 ? msg.teams[s] : s));
+  if (msg.pool !== undefined) game.setPool(msg.pool);
+
+  show(ui.waiting, false);
+  show(ui.scoreboard, true);
+  show(ui.wavebar, false);
+  show($('#bottom'), !game.spectating);
+
+  arenaUi.renderHub(msg);
+  if (boardOn) roomUi.board(msg, true);
+  comms.syncPeersWithRoom();
+  comms.updateHudButtons();
+
+  if (msg.st === 'countdown' && (!prev || prev.st !== 'countdown')) {
+    countdownEnd = performance.now() + msg.timer * 1000;
+    lastBeep = -1;
+  }
+  if (msg.st === 'playing' && prev && prev.st === 'countdown') {
+    sfx.play('go', 800);
+    center('FIGHT!', '');
+    setTimeout(() => {
+      if (arenaState && arenaState.st === 'playing' && ui.center.textContent === 'FIGHT!') center('', '', false);
+    }, 900);
+  }
+  if (msg.suddenDeath && (!prev || !prev.suddenDeath)) {
+    sfx.play('beep', 800);
+    flash(tr('suddenDeath'), '', 1600);
+  }
+  if (msg.st === 'over' && (!prev || prev.st !== 'over')) {
+    const myTeam = game.slot >= 0 ? msg.teams[game.slot] : -1;
+    const label =
+      myTeam >= 0
+        ? msg.winner === myTeam
+          ? 'VICTORY'
+          : 'DEFEAT'
+        : msg.winner >= 0
+          ? `${TEAM_NAMES[msg.winner]} WINS`
+          : 'DRAW';
+    sfx.play(myTeam >= 0 && msg.winner !== myTeam ? 'lose' : 'win', 800);
+    flash(label, '', 2400);
+  }
+}
+
 // Hold TAB for the ranked scoreboard in online rooms.
 let boardOn = false;
 input.on('board', (on) => {
-  boardOn = on && mode === 'room' && !!room;
-  roomUi.board(room, boardOn);
+  const src = mode === 'arena' ? arenaState : mode === 'room' ? room : null;
+  boardOn = on && !!src;
+  roomUi.board(src, boardOn);
 });
 
 // ---------- network ----------
@@ -855,7 +1006,7 @@ net.on('close', () => {
     renderParkedBar();
   }
   if (game.active && !solo.active) {
-    rejoinCode = (mode === 'room' ? room?.code : coop?.code) ?? null;
+    rejoinCode = (mode === 'room' ? room?.code : mode === 'arena' ? arenaState?.code : coop?.code) ?? null;
     toMenu();
     toast(rejoinCode ? 'CONNECTION LOST - REJOINING...' : 'CONNECTION LOST');
   }
@@ -876,25 +1027,44 @@ net.on('joined', (msg) => {
   parkedRoom = null;
   renderParkedBar();
   if (msg.mode === 'coop') {
+    if (activeCommsCode !== msg.code) comms.resetAll();
+    activeCommsCode = msg.code;
+    arenaUi.hideAll();
     enterSurvival('coop');
     game.roomState = 'playing';
     coop = null;
     crewNames = [];
+  } else if (msg.mode === 'arena') {
+    if (mode !== 'arena') toMenu();
+    else if (activeCommsCode && activeCommsCode !== msg.code) comms.resetAll();
+    activeCommsCode = msg.code;
+    mode = 'arena';
+    if (msg.actorId) arenaUi.setActorId(msg.actorId);
+    game.spectating = Boolean(msg.spectating || msg.slot < 0);
+    show($('#bottom'), !game.spectating);
+    renderParkedBar();
   } else {
     if (mode !== 'room') toMenu();
+    else if (activeCommsCode && activeCommsCode !== msg.code) comms.resetAll();
+    arenaUi.hideAll();
+    activeCommsCode = msg.code;
     mode = 'room';
+    game.spectating = false;
+    show($('#bottom'), true);
     renderParkedBar();
   }
   game.setSlot(msg.slot);
+  comms.updateHudButtons();
   history.replaceState(null, '', `/?room=${msg.code}`);
   inviteCode = null;
   show($('#invite'), false);
-  show(ui.menu, false);
+      show(ui.menu, false);
   show(ui.hud, true);
   show(ui.over, false);
   show(ui.pause, false);
   input.enabled = true;
   input.releaseAll();
+  canvas.focus({ preventScroll: true });
   lastState = '';
   hud.reset();
   feel.reset();
@@ -910,6 +1080,28 @@ net.on('map', (msg) => {
   game.loadMap(msg);
 });
 net.on('room', applyRoom);
+net.on('arena', applyArena);
+net.on('arena_role', (msg) => {
+  game.setSlot(msg.slot);
+  game.spectating = Boolean(msg.spectating || msg.slot < 0);
+  game.pending = [];
+  show($('#bottom'), !game.spectating);
+  input.enabled = ui.pause.classList.contains('hidden');
+  input.releaseAll();
+  if (!game.spectating) canvas.focus({ preventScroll: true });
+  if (arenaState) arenaUi.renderHub(arenaState);
+  comms.updateHudButtons();
+});
+net.on('foul', (msg) => {
+  sfx.play('hurt', 800);
+  const ruleLabel = tr(`rule_${msg.rule}`);
+  const pen = msg.pointPenalty ? ' (-1 PT!)' : ' (-12 HP)';
+  toast(`⚡ ${tr('foulAlert')}: ${msg.name} — ${ruleLabel}${pen}`);
+});
+net.on('sos_joined', (msg) => {
+  sfx.play('unlock', 800);
+  toast(`🆘 ${msg.helperName} → ${msg.callerName}!`);
+});
 net.on('coop', applyCoop);
 net.on('s', (msg) => {
   if (msg.sv && mode === 'coop') survivalSnapshot(msg);
@@ -960,33 +1152,49 @@ net.on('lobby', () => {
 $('#btn-lang')?.addEventListener('click', toggleLang);
 onLangChange(() => {
   ui.conn.textContent = net.open ? tr('connected') : tr('connecting');
+  updateTouchPrefLabel();
   renderBest();
+  if (mode === 'solo' || mode === 'coop') {
+    $('#pause-note').textContent = tr(mode === 'solo' ? 'soloPaused' : 'coopPaused');
+    $('#btn-leave').textContent = tr('quitMenu');
+    $('#btn-retry').textContent = tr(mode === 'solo' ? 'tryAgain' : 'playAgain');
+  } else {
+    $('#pause-note').textContent = tr('matchPaused');
+    $('#btn-leave').textContent = tr('leaveMatch');
+  }
   if (!ui.coopWait.classList.contains('hidden')) renderSurvivalLobby();
   if (!ui.soloOver.classList.contains('hidden')) renderSurvivalOverMaps();
+  if (!ui.waiting.classList.contains('hidden') && room) roomUi.waiting(room);
+  arenaUi.refreshLang();
+  comms.updateHudButtons();
 });
+
 applyDomI18n();
 
 // ---------- per-frame HUD ----------
 
 function updateHud(dt) {
-  if (!game.active || mode === 'menu' || (mode === 'room' && !room)) return;
+  const activeRoom = mode === 'arena' ? arenaState : room;
+  if (!game.active || mode === 'menu' || ((mode === 'room' || mode === 'arena') && !activeRoom)) return;
   const h = game.hud();
-  const hp = Math.max(0, h.hp);
-  ui.hpFill.style.width = `${hp}%`;
-  const hpTxt = String(Math.ceil(hp));
-  if (ui.hpText.textContent !== hpTxt) ui.hpText.textContent = hpTxt;
-  ui.hpBar.classList.toggle('low', hp <= 25);
-  ui.hpBar.classList.toggle('mid', hp > 25 && hp <= 50);
-  ui.fuelFill.style.width = `${Math.max(0, h.fuel)}%`;
-  hud.update(h, dt);
-  feel.update(h, dt);
+  if (!game.spectating) {
+    const hp = Math.max(0, h.hp);
+    ui.hpFill.style.width = `${hp}%`;
+    const hpTxt = String(Math.ceil(hp));
+    if (ui.hpText.textContent !== hpTxt) ui.hpText.textContent = hpTxt;
+    ui.hpBar.classList.toggle('low', hp <= 25);
+    ui.hpBar.classList.toggle('mid', hp > 25 && hp <= 50);
+    ui.fuelFill.style.width = `${Math.max(0, h.fuel)}%`;
+    hud.update(h, dt);
+    feel.update(h, dt);
+  }
   if (mode !== 'solo') setText(ui.netinfo, `${Math.round(h.rtt)} MS`);
   if (mode === 'solo' || mode === 'coop') {
     updateWaveHud();
     return;
   }
 
-  if (room.st === 'countdown') {
+  if (activeRoom.st === 'countdown') {
     const left = (countdownEnd - performance.now()) / 1000;
     const n = Math.max(1, Math.ceil(left));
     if (n !== lastBeep && left > 0) {
@@ -994,11 +1202,11 @@ function updateHud(dt) {
       sfx.play('beep', 800);
       center(String(n), 'GET READY');
     }
-  } else if (room.st === 'playing' || room.st === 'waiting') {
-    if (h.dead && game.present[game.slot] && ui.center.textContent !== 'FIGHT!') {
+  } else if (activeRoom.st === 'playing' || activeRoom.st === 'waiting' || activeRoom.st === 'idle') {
+    if (!game.spectating && h.dead && game.present[game.slot] && ui.center.textContent !== 'FIGHT!') {
       const t = Math.max(0, h.respawnT);
       center('', t > 0 ? `RESPAWN IN ${t.toFixed(1)}` : '', false);
-    } else if (!h.dead && ui.sub.textContent.startsWith('RESPAWN')) {
+    } else if ((!h.dead || game.spectating) && ui.sub.textContent.startsWith('RESPAWN')) {
       center(ui.center.textContent === 'FIGHT!' ? 'FIGHT!' : '', '', false);
     }
   }
@@ -1051,6 +1259,7 @@ function frame(now) {
   if (steps === 15) acc = 0;
   if (!frozen) fx.update(dt);
   game.render(ctx, acc / TICK_MS, frozen ? 0 : dt);
+  touch.syncVisibility();
   updateHud(dt);
   requestAnimationFrame(frame);
 }

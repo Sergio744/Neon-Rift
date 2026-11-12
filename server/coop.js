@@ -51,8 +51,22 @@ export class CoopRoom {
     return { t: 'map', ...this.game.mapState() };
   }
 
+  mediaInfo() {
+    return {
+      t: 'media',
+      states: this.clients.map((c) =>
+        c?.media ? { mic: !!c.media.mic, cam: !!c.media.cam, vscope: c.media.vscope || 'all' } : null,
+      ),
+    };
+  }
+
+  broadcastMedia() {
+    this.broadcast(this.mediaInfo());
+  }
+
   join(client) {
     const slot = this.clients.indexOf(null);
+    client.media = { mic: false, cam: false, vscope: 'all' };
     this.clients[slot] = client;
     client.room = this;
     resetInputs(client, slot);
@@ -60,6 +74,7 @@ export class CoopRoom {
     this.run.addHuman(slot);
     send(client, this.mapMsg());
     this.broadcast(this.info());
+    this.broadcastMedia();
     return slot;
   }
 
@@ -71,6 +86,7 @@ export class CoopRoom {
     this.run.removeHuman(slot);
     this.broadcast({ t: 'left', slot });
     this.broadcast(this.info());
+    this.broadcastMedia();
   }
 
   setMap(_client, map) {

@@ -34,6 +34,12 @@ export class Input {
     this.buildReq = null;
     // Buttons pressed since the last tick: a click or tap released before the tick still counts once.
     this.tapped = 0;
+    this.touchButtons = 0;
+    this.touchAutoPulseFire = false;
+    this.touchAimLatched = false;
+    this.touchAimAngle = 0;
+    this.touchAimDist = 0.65;
+    this.lastTouchMs = 0;
     this.handlers = {};
     this.enabled = true;
 
@@ -84,7 +90,9 @@ export class Input {
     });
 
     canvas.addEventListener('mousedown', (e) => {
+      if (performance.now() - this.lastTouchMs < 600) return;
       e.preventDefault();
+      this.touchAimLatched = false;
       this.emit('gesture');
       if (e.button === 0) this.mouseBtn |= BTN.FIRE;
       if (e.button === 2) this.mouseBtn |= BTN.ALT;
@@ -92,12 +100,17 @@ export class Input {
       this.tapped |= this.mouseBtn;
     });
     window.addEventListener('mouseup', (e) => {
+      if (performance.now() - this.lastTouchMs < 600) return;
       if (e.button === 0) this.mouseBtn &= ~BTN.FIRE;
       if (e.button === 2) this.mouseBtn &= ~BTN.ALT;
       if (e.button === 1) this.mouseBtn &= ~BTN.MELEE;
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    window.addEventListener('mousemove', (e) => this.track(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => {
+      if (performance.now() - this.lastTouchMs < 600) return;
+      this.touchAimLatched = false;
+      this.track(e.clientX, e.clientY);
+    });
     canvas.addEventListener(
       'wheel',
       (e) => {
@@ -130,7 +143,7 @@ export class Input {
     const tapped = this.tapped;
     this.tapped = 0;
     if (!this.enabled) return 0;
-    let b = this.mouseBtn | tapped;
+    let b = this.mouseBtn | this.touchButtons | tapped;
     for (const k of this.keys) b |= MAP[k] || 0;
     return b;
   }
@@ -138,6 +151,32 @@ export class Input {
   releaseAll() {
     this.keys.clear();
     this.mouseBtn = 0;
+    this.touchButtons = 0;
+    this.touchAutoPulseFire = false;
+  }
+
+  markTouch() {
+    this.lastTouchMs = performance.now();
+    this.emit('gesture');
+  }
+
+  triggerTouchBtn(flag) {
+    this.markTouch();
+    this.tapped |= flag;
+  }
+
+  setTouchAim(angle, distNorm = 0.65) {
+    this.markTouch();
+    this.touchAimLatched = true;
+    this.touchAimAngle = angle;
+    this.touchAimDist = Math.max(0.15, Math.min(1, distNorm));
+  }
+
+  syncTouchCrosshair(shoulderScreenX, shoulderScreenY) {
+    if (!this.touchAimLatched) return;
+    const radius = 24 + this.touchAimDist * 96;
+    this.mx = Math.max(6, Math.min(this.canvas.width - 6, shoulderScreenX + Math.cos(this.touchAimAngle) * radius));
+    this.my = Math.max(6, Math.min(this.canvas.height - 6, shoulderScreenY + Math.sin(this.touchAimAngle) * radius));
   }
 
   // Aim target in world pixels (the backbuffer is half the world resolution).

@@ -1,5 +1,6 @@
 import { PLAYER_COLORS } from '/shared/constants.js';
 import { GROUP_MODES, MODES, TEAM_COLORS, TEAM_NAMES } from '/shared/modes.js';
+import { RULE_DEFS, TIME_LIMITS, formatClock } from '/shared/rules.js';
 import { tr } from '../i18n.js';
 import { chips, poolPicker, settingRow } from './controls.js';
 
@@ -69,21 +70,52 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
   fold.addEventListener('click', () => setFolded(!$('#waiting').classList.contains('folded')));
   const mapItems = () => maps().map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
 
-  function playerTag(msg, s) {
-    const row = el('span', 'pl');
+  function playerTag(msg, s, allowManage = false) {
+    const isBot = Boolean(msg.bots?.[s]);
+    const row = el('span', `pl${isBot ? ' bot' : ''}`);
     row.style.setProperty('--c', slotColor(msg, s));
     row.append(el('i'), el('span', 'nm', name(msg, s)));
-    if (s === game.slot) row.append(el('small', 'you', 'YOU'));
+    if (isBot) row.append(el('small', 'ai-tag', 'AI'));
+    if (s === game.slot) row.append(el('small', 'you', tr('youShort')));
     if (isGroup(msg) && s === msg.host) row.append(el('small', 'host', 'HOST'));
+    if (allowManage && isBot) {
+      if (msg.mode === 'teams') {
+        const swap = el('button', 'pl-act', '⇄');
+        swap.type = 'button';
+        swap.title = 'Switch team';
+        swap.addEventListener('click', (e) => {
+          e.stopPropagation();
+          net.send({ t: 'team', team: 1 - msg.teams[s], slot: s });
+        });
+        row.appendChild(swap);
+      }
+      const rm = el('button', 'pl-act rm', '×');
+      rm.type = 'button';
+      rm.title = 'Remove bot';
+      rm.addEventListener('click', (e) => {
+        e.stopPropagation();
+        net.send({ t: 'rmbot', slot: s });
+      });
+      row.appendChild(rm);
+    }
     return row;
   }
 
-  function renderPlayers(msg) {
+  function renderPlayers(msg, host) {
     const box = $('#w-players');
     box.textContent = '';
     box.classList.toggle('teams', msg.mode === 'teams');
+    const total = msg.names.filter(Boolean).length;
+    const canAddBot = host && !msg.pub && total < msg.max;
+
     if (msg.mode !== 'teams') {
-      msg.names.forEach((n, s) => n && box.appendChild(playerTag(msg, s)));
+      msg.names.forEach((n, s) => n && box.appendChild(playerTag(msg, s, host)));
+      if (canAddBot) {
+        const add = el('button', 'btn small bot-add', tr('addBot'));
+        add.type = 'button';
+        add.addEventListener('click', () => net.send({ t: 'addbot' }));
+        box.appendChild(add);
+      }
       return;
     }
     for (const t of [0, 1]) {
@@ -92,20 +124,28 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
       const members = msg.names.map((n, s) => (n && msg.teams[s] === t ? s : -1)).filter((s) => s >= 0);
       const head = el('div', 'team-head');
       head.append(el('b', '', TEAM_NAMES[t]), el('span', 'dim', String(members.length)));
+      const actions = el('div', 'team-actions');
       if (msg.teams[game.slot] !== t) {
-        const join = el('button', 'btn small', 'JOIN');
+        const join = el('button', 'btn small', tr('joinTeam'));
         join.type = 'button';
         join.addEventListener('click', () => net.send({ t: 'team', team: t }));
-        head.appendChild(join);
+        actions.appendChild(join);
       }
+      if (canAddBot) {
+        const addBot = el('button', 'btn small bot-add', tr('addBot'));
+        addBot.type = 'button';
+        addBot.addEventListener('click', () => net.send({ t: 'addbot', team: t }));
+        actions.appendChild(addBot);
+      }
+      head.appendChild(actions);
       col.appendChild(head);
-      for (const s of members) col.appendChild(playerTag(msg, s));
-      if (!members.length) col.appendChild(el('span', 'dim empty', 'NOBODY YET'));
+      for (const s of members) col.appendChild(playerTag(msg, s, host));
+      if (!members.length) col.appendChild(el('span', 'dim empty', tr('nobodyYet')));
       box.appendChild(col);
     }
   }
 
-  // Duel: waiting for the opponent (both can change the map and weapons).
+  // Duel: waiting for the opponent (both can change the map and weapons, or upgrade to Squads / spar a Bot).
   // Group: lobby with the player list; only the host edits the settings and starts.
   function waiting(msg) {
     if (msg.code !== foldedCode) setFolded(false);
@@ -119,7 +159,13 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     setText($('#w-count'), group ? `${n}/${msg.max} ${tr('players')}` : '');
     setText($('#w-code'), msg.code);
     $('#w-players').classList.toggle('hidden', !group);
-    if (group) renderPlayers(msg);
+    if (group) renderPlayers(msg, host);
+
+    const duelSquadRow = $('#w-squad-actions');
+    if (duelSquadRow) {
+      const showDuelUpgrade = !group && !msg.pub && host;
+      duelSquadRow.classList.toggle('hidden', !showDuelUpgrade);
+    }
 
     const modeRow = $('#w-mode');
     modeRow.classList.toggle('hidden', !group);
@@ -127,10 +173,50 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
       const items = GROUP_MODES.map((id) => ({ id, name: MODES[id].name }));
       settingRow(modeRow, tr('modeLabel'), items, msg.mode, (mode) => net.send({ t: 'setopts', mode }), !host);
     }
+    const botSkillRow = $('#w-botskill');
+    if (botSkillRow) {
+      const hasBots = Boolean(msg.bots?.some(Boolean));
+      const showSkill = !msg.pub && (group || hasBots);
+      botSkillRow.classList.toggle('hidden', !showSkill);
+      if (showSkill) {
+        const skills = [
+          { id: 'rookie', name: tr('skillRookie') },
+          { id: 'veteran', name: tr('skillVeteran') },
+          { id: 'ace', name: tr('skillAce') },
+        ];
+        settingRow(botSkillRow, tr('botSkillLabel'), skills, msg.botSkill || 'veteran', (skill) =>
+          net.send({ t: 'botskill', skill }), !host);
+      }
+    }
     settingRow($('#w-maps'), tr('mapLabel'), mapItems(), msg.map, (id) => net.send({ t: 'setmap', map: id }), !host);
     const goals = MODES[msg.mode].goals.map((g) => ({ id: g, name: String(g) }));
     const goalLabel = { duel: tr('pointsToWin'), ffa: tr('killsToWin'), teams: tr('teamKills') }[msg.mode];
     settingRow($('#w-goal'), goalLabel, goals, msg.goal, (goal) => net.send({ t: 'setopts', goal }), !host);
+    const timerRow = $('#w-timer');
+    if (timerRow) {
+      const timers = TIME_LIMITS.map((s) => ({ id: s, name: s === 0 ? tr('unlimitedTime') : formatClock(s) }));
+      settingRow(timerRow, tr('timerLabel'), timers, msg.timeLimit || 0, (timeLimit) =>
+        net.send({ t: 'setopts', timeLimit }), !host);
+    }
+    const rulesRow = $('#w-rules');
+    if (rulesRow) {
+      rulesRow.textContent = '';
+      rulesRow.className = 'w-row';
+      rulesRow.appendChild(el('span', 'w-label', tr('rulesLabel')));
+      const list = el('div', 'chips');
+      const curRules = msg.rules || {};
+      for (const r of RULE_DEFS.filter((d) => d.id !== 'noSos')) {
+        const b = el('button', `chip${curRules[r.id] ? ' active' : ''}`, tr(`rule_${r.id}`));
+        b.type = 'button';
+        b.disabled = !host;
+        b.addEventListener('click', () => {
+          const next = { ...curRules, [r.id]: !curRules[r.id] };
+          net.send({ t: 'setopts', rules: next });
+        });
+        list.appendChild(b);
+      }
+      rulesRow.appendChild(list);
+    }
     const loadouts = [
       { id: 'drops', name: tr('riftDrops') },
       { id: 'full', name: tr('fullArsenal') },
@@ -178,6 +264,22 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     }
     const goal = msg.st === 'waiting' ? tr('warmup') : `${tr('firstTo')} ${msg.goal}`;
     setText($('#goal-text'), `${isGroup(msg) && msg.st !== 'waiting' ? `${MODES[msg.mode].name} - ` : ''}${goal}`);
+    const timerEl = $('#timer-text');
+    if (timerEl) {
+      const showTimer = msg.st === 'playing' && (msg.timeLimit > 0 || msg.suddenDeath);
+      timerEl.classList.toggle('hidden', !showTimer);
+      if (showTimer) {
+        timerEl.textContent = msg.suddenDeath ? tr('suddenDeath') : formatClock(msg.matchTimer || 0);
+        timerEl.classList.toggle('urgent', Boolean(msg.suddenDeath || (msg.matchTimer > 0 && msg.matchTimer <= 15)));
+      }
+    }
+    const rulesBar = $('#active-rules-bar');
+    if (rulesBar) {
+      const activeIds = RULE_DEFS.filter((d) => msg.rules?.[d.id]);
+      rulesBar.classList.toggle('hidden', activeIds.length === 0 || msg.st === 'waiting');
+      rulesBar.textContent = '';
+      for (const r of activeIds) rulesBar.appendChild(el('span', 'rule-pill', tr(`rule_${r.id}`)));
+    }
     const m = maps().find((x) => x.id === msg.map);
     setText($('#map-text'), m ? m.name : msg.map);
     $('#board-hint').classList.toggle('hidden', !isGroup(msg));
