@@ -29,6 +29,7 @@ export const MAT_TNT = 11;
 export const MAT_PLANK = 12;
 export const MAT_ANCHOR = 13;
 export const MAT_BUILD = 14; // builder pieces: static, never fall, never crumble
+export const MAT_BOUNCE = 15; // spring mattresses, luxury sofas, diving boards & jungle bounce pads
 
 export const BTN = { LEFT: 1, RIGHT: 2, JUMP: 4, DOWN: 8, FIRE: 16, ALT: 32, SPRINT: 64, MELEE: 128 };
 export const BTN_MASK = 255;

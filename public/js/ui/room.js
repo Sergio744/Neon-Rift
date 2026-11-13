@@ -28,11 +28,18 @@ export function slotColor(msg, s) {
   return PLAYER_COLORS[s % PLAYER_COLORS.length];
 }
 
-// Size tag from the map area: one screen is SMALL.
+export function mapDisplayName(m) {
+  const key = `map_${m.id}`;
+  const loc = tr(key);
+  return loc !== key ? loc : m.name;
+}
+
+// Size tag from the map area: one screen is SMALL; skyscraper maps show their floor count.
 export function sizeTag(m) {
   if (!m.w) return '';
+  if (m.id === 'hotel') return tr('sizeTower');
   const screens = (m.w * m.h) / (1600 * 900);
-  return screens <= 1.05 ? 'SMALL' : screens <= 2.2 ? 'LARGE' : 'HUGE';
+  return screens <= 1.05 ? tr('sizeSmall') : screens <= 2.2 ? tr('sizeLarge') : tr('sizeHuge');
 }
 
 // Present slots, best first (kills, then fewest deaths).
@@ -68,7 +75,7 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     fold.setAttribute('aria-expanded', String(!on));
   };
   fold.addEventListener('click', () => setFolded(!$('#waiting').classList.contains('folded')));
-  const mapItems = () => maps().map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+  const mapItems = () => maps().map((m) => ({ id: m.id, name: mapDisplayName(m), tag: sizeTag(m) }));
 
   function playerTag(msg, s, allowManage = false) {
     const isBot = Boolean(msg.bots?.[s]);
@@ -206,11 +213,13 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
       const list = el('div', 'chips');
       const curRules = msg.rules || {};
       for (const r of RULE_DEFS.filter((d) => d.id !== 'noSos')) {
-        const b = el('button', `chip${curRules[r.id] ? ' active' : ''}`, tr(`rule_${r.id}`));
+        const on = Boolean(curRules[r.id]);
+        const b = el('button', `chip${on ? ' on active' : ''}`, `${on ? '✓ ' : ''}${tr(`rule_${r.id}`)}`);
         b.type = 'button';
         b.disabled = !host;
+        b.setAttribute('aria-pressed', String(on));
         b.addEventListener('click', () => {
-          const next = { ...curRules, [r.id]: !curRules[r.id] };
+          const next = { ...curRules, [r.id]: !on };
           net.send({ t: 'setopts', rules: next });
         });
         list.appendChild(b);

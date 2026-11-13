@@ -261,11 +261,13 @@ export function stepPlayer(p, inp, t, out, opts) {
 
   const stuck = unstick(p, t);
   const ns = stuck === 1;
+  const inLift = t.inLift ? t.inLift(p.x, p.y - PHYS.HEIGHT * 0.5) : null;
 
-  if (pressed & BTN.DOWN && p.grounded && onPlatformTop(p, t)) {
+  if ((pressed & BTN.DOWN && p.grounded && onPlatformTop(p, t)) || (inLift && down && onPlatformTop(p, t))) {
     p.dropT = PHYS.DROP_T;
     p.grounded = false;
   }
+  if (inLift && down) p.dropT = Math.max(p.dropT, 0.08);
   p.dropT = Math.max(0, p.dropT - dt);
   const dropping = p.dropT > 0 || (down && !p.grounded);
 
@@ -311,15 +313,16 @@ export function stepPlayer(p, inp, t, out, opts) {
   // Jump, then flip (double jump) on a fresh press in the air: one air jump, refilled on landing.
   const jumpMul = turbo ? BUFF_INFO[BUFF.TURBO].jump : 1;
   let jumped = false;
-  if (p.jumpBuf > 0 && (p.grounded || p.coyote > 0)) {
-    p.vy = -PHYS.JUMP_V * jumpMul;
+  if (p.jumpBuf > 0 && (p.grounded || p.coyote > 0) && !inLift) {
+    const onBounce = p.grounded && t.hasBounceUnder && t.hasBounceUnder(p.x - PHYS.HALF_W, p.x + PHYS.HALF_W, p.y);
+    p.vy = -(onBounce ? 980 : PHYS.JUMP_V) * jumpMul;
     p.grounded = false;
     p.coyote = 0;
     p.jumpBuf = 0;
     p.jumping = true;
     jumped = true;
     if (out) out.push({ k: 'jump' });
-  } else if (pressed & BTN.JUMP && !p.grounded && p.flips > 0 && !p.jetOn) {
+  } else if (pressed & BTN.JUMP && !p.grounded && p.flips > 0 && !p.jetOn && !inLift) {
     p.vy = Math.min(p.vy, -PHYS.FLIP_V * jumpMul);
     p.flips--;
     p.jumpBuf = 0;
@@ -377,6 +380,25 @@ export function stepPlayer(p, inp, t, out, opts) {
   const maxFall = dropping ? PHYS.MAX_FALL_DROP : PHYS.MAX_FALL;
   if (p.vy > maxFall) p.vy = maxFall;
   if (p.grounded && p.vy > 0) p.vy = 0;
+
+  // Express Elevator / Waterfall Updraft shafts: hold JUMP to ride up fast, DOWN to descend fast,
+  // or release inside the shaft to brake smoothly and step off at any floor.
+  if (inLift) {
+    if (!turbo) p.fuel = Math.min(RULES.FUEL, p.fuel + RULES.FUEL_REGEN * 0.85 * dt);
+    p.flips = PHYS.FLIPS;
+    if (jumpHeld) {
+      p.grounded = false;
+      p.jetOn = false;
+      p.jetHold = 0;
+      p.vy = approach(p.vy, -1040 * jumpMul, 4600 * dt);
+    } else if (down) {
+      p.grounded = false;
+      p.jetOn = false;
+      p.vy = approach(p.vy, 960, 4400 * dt);
+    } else if (!p.grounded) {
+      p.vy = approach(p.vy, 0, 3400 * dt);
+    }
+  }
 
   // Firing happens before movement so shots leave from where the player saw themselves.
   if (pressed & BTN.FIRE) p.fireBuf = 0.12;
@@ -437,6 +459,8 @@ export function stepPlayer(p, inp, t, out, opts) {
     p.vy *= PHYS.MAX_SPEED / sp;
   }
   const wasGrounded = p.grounded;
+  const preVy = p.vy;
+  let bounced = false;
   if (stuck !== 2) {
     if (ns) p.vx *= 0.9;
     const blocked = moveX(p, p.vx * dt, t, wasGrounded, ns);
@@ -444,8 +468,21 @@ export function stepPlayer(p, inp, t, out, opts) {
     const hitY = moveY(p, p.vy * dt, t, dropping, ns && p.vy < 0);
     if (hitY === -1 && p.vy < -200 && out) out.push({ k: 'bump', d: 0 });
     if (hitY === 1) {
-      if (out && p.vy > 320) out.push({ k: 'land', v: p.vy });
-      p.vy = 0;
+      if (!down && preVy > 95 && t.hasBounceUnder && t.hasBounceUnder(p.x - PHYS.HALF_W, p.x + PHYS.HALF_W, p.y)) {
+        const launch = jumpHeld ? 980 : Math.max(760, Math.min(980, preVy * 1.18));
+        p.vy = -launch * jumpMul;
+        p.grounded = false;
+        p.coyote = 0;
+        p.jumpBuf = 0;
+        p.flips = PHYS.FLIPS;
+        p.jumping = true;
+        jumped = true;
+        bounced = true;
+        if (out) out.push({ k: 'jump' });
+      } else {
+        if (out && p.vy > 320) out.push({ k: 'land', v: p.vy });
+        p.vy = 0;
+      }
     } else if (hitY === -1 && p.vy < 0) {
       p.vy = 0;
     }
@@ -454,7 +491,7 @@ export function stepPlayer(p, inp, t, out, opts) {
     p.y += p.vy * dt;
   }
 
-  p.grounded = checkGround(p, t, dropping);
+  p.grounded = bounced ? false : checkGround(p, t, dropping);
   if (!p.grounded && wasGrounded && !jumped && p.vy >= 0 && !dropping) {
     const hw = PHYS.HALF_W;
     for (let d = 1; d <= PHYS.STEP_DOWN; d++) {

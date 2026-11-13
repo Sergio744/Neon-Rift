@@ -5,7 +5,7 @@ import { BTN, BUFF, MAT_BEDROCK, PHYS } from '../shared/constants.js';
 import { Game } from '../shared/game.js';
 import { ITEM } from '../shared/game/items.js';
 import { prismTrace } from '../shared/geom.js';
-import { MAP_IDS, buildMap } from '../shared/maps.js';
+import { MAP_IDS, MAPS, PALETTE, buildMap } from '../shared/maps.js';
 import { createPlayer, packPlayer, unpackPlayer } from '../shared/player.js';
 import { PROJ, VORTEX_P } from '../shared/projectiles.js';
 import { Survival } from '../shared/survival.js';
@@ -960,6 +960,162 @@ test('Mobile & Tablet Twin-Stick Touch Controls: serves touch.js, HTML controls,
     await srv.close();
   }
 });
+
+test('GRAND HOTEL (55 floors) & AMAZON JUNGLE maps, Express Elevators, Bouncy Furniture & Chandelier Crush', () => {
+  assert.ok(MAP_IDS.includes('hotel'), 'hotel is registered in MAP_IDS');
+  assert.ok(MAP_IDS.includes('jungle'), 'jungle is registered in MAP_IDS');
+
+  // Build every map in a single process to verify global 256-colour palette safety & spawn clearance.
+  for (const id of Object.keys(MAPS)) {
+    const m = buildMap(id, 2026);
+    for (const [sx, sy] of m.spawns) {
+      const fy = m.terrain.findStand(sx, sy);
+      assert.equal(m.terrain.rectSolid(sx - PHYS.HALF_W, fy - PHYS.HEIGHT, sx + PHYS.HALF_W, fy), false, `${id} spawn [${sx},${sy}] is clear`);
+    }
+  }
+  assert.ok(PALETTE.length < 235, `PALETTE stays safely below 256 (${PALETTE.length})`);
+
+  // 1. GRAND HOTEL: Express Elevator ascent, brake, and descent
+  const g = duel('hotel');
+  assert.equal(g.terrain.w, 960);
+  assert.equal(g.terrain.h, 2724);
+  assert.equal(g.terrain.lifts.length, 2);
+
+  const p0 = g.players[0];
+  let seq = 1;
+  const runTick = (b0) => {
+    g.applyInput(0, { s: seq, b: b0, a: 0, w: 0, v: g.tick });
+    g.applyInput(1, { s: seq, b: 0, a: Math.PI, w: 0, v: g.tick });
+    seq++;
+    g.update();
+  };
+
+  // Place player 0 at bottom of West Express Elevator shaft (cells 380..404 -> world x = 784)
+  g.spawnAt(0, 784, g.terrain.findStand(784, 5350));
+  p0.shield = 0;
+  const startY = p0.y;
+  for (let i = 0; i < 120; i++) runTick(BTN.JUMP);
+  assert.ok(startY - p0.y > 1400, `Express Elevator climbs 15+ storeys in 2s (climbed ${Math.round(startY - p0.y)}px)`);
+  assert.ok(p0.fuel >= 95, 'Express Elevator does not drain jetpack fuel');
+
+  const midY = p0.y;
+  for (let i = 0; i < 60; i++) runTick(BTN.DOWN);
+  assert.ok(p0.y - midY > 600, `Holding DOWN in Express Elevator descends rapidly (dropped ${Math.round(p0.y - midY)}px)`);
+
+  // 2. Bouncy King-Size Luxury Bed (open-air Rooftop Penthouse bed at ROOF_Y = 200 cells = 400px)
+  g.spawnAt(0, 712, 330);
+  p0.vy = 260;
+  p0.grounded = false;
+  let bouncedUp = false;
+  for (let i = 0; i < 30; i++) {
+    runTick(0);
+    if (p0.vy < -700) bouncedUp = true;
+  }
+  assert.ok(bouncedUp, 'Dropping onto a hotel luxury bed launches the player skyward');
+
+  // 3. Chandelier chain shot detaches chandelier as a real falling rigid body & shatters on the lobby floor
+  // Floor 1 STREET_Y = 2700, ceilY = 2700 - 58 + 4 = 2646 cells = 5292 world px (chain at y = 5292..5308)
+  g.op(0, 1, 960, 5298, 6, 0);
+  let chandelierDetached = false;
+  let chandelierLanded = false;
+  for (let i = 0; i < 80; i++) {
+    g.sim.step();
+    if (g.sim.bodies.length > 0) chandelierDetached = true;
+    if (g.sim.landings.length > 0) chandelierLanded = true;
+  }
+  assert.ok(chandelierDetached && chandelierLanded, 'Crystal chandelier detaches and crashes onto the floor when its chain is shot');
+
+  // 4. Rift Room Service spawns interior drops inside GRAND HOTEL floors
+  g.riftDrops = true;
+  const drop = g.dropMystery();
+  assert.ok(drop && drop.y > 120 && drop.y < g.worldH - 40, `Hotel mystery crate spawns indoors (y=${drop?.y})`);
+
+  // 5. AMAZON JUNGLE: 3-tier rainforest + Waterfall Updrafts + Bouncy Giant Mushrooms
+  const jg = duel('jungle');
+  assert.equal(jg.terrain.w, 1800);
+  assert.equal(jg.terrain.h, 740);
+  assert.equal(jg.terrain.lifts.length, 2);
+});
+
+test('Rift Colosseum rule chips highlight (.chip.on) and arena_cfg applies rules & map live in Open Ring + challenges', async () => {
+  const fs = await import('node:fs/promises');
+  const [arenaJs, roomJs, css] = await Promise.all([
+    fs.readFile(new URL('../public/js/ui/arena.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../public/js/ui/room.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../public/style.css', import.meta.url), 'utf8'),
+  ]);
+  assert.ok(arenaJs.includes("chip${on ? ' on active' : ''}"), 'arena.js toggles .on class on rule chips');
+  assert.ok(roomJs.includes("chip${on ? ' on active' : ''}"), 'room.js toggles .on class on rule chips');
+  assert.ok(css.includes('#ar-rules .chip.on'), 'style.css highlights selected Colosseum rule chips');
+
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+  const msgs = [];
+  let waiters = [];
+  ws.on('message', (d) => {
+    const m = JSON.parse(d.toString());
+    msgs.push(m);
+    waiters = waiters.filter((w) => !w(m));
+  });
+  const wait = (pred, ms = 4000) =>
+    new Promise((res, rej) => {
+      const found = msgs.find(pred);
+      if (found) return res(found);
+      const to = setTimeout(() => rej(new Error('timeout')), ms);
+      waiters.push((m) => {
+        if (!pred(m)) return false;
+        clearTimeout(to);
+        res(m);
+        return true;
+      });
+    });
+
+  try {
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ t: 'arena', name: 'sergio', priv: true, autoAi: false, initialAis: 1 }));
+    const joined = await wait((m) => m.t === 'joined' && m.mode === 'arena');
+    const hub = srv.lobby.rooms.get(joined.code);
+    assert.ok(hub instanceof ArenaHub);
+
+    msgs.length = 0;
+    ws.send(
+      JSON.stringify({
+        t: 'arena_cfg',
+        map: 'hotel',
+        goal: 10,
+        timeLimit: 180,
+        rules: { pistolOnly: true, noJetpack: true },
+      }),
+    );
+
+    const mapMsg = await wait((m) => m.t === 'map' && m.id === 'hotel');
+    const infoMsg = await wait((m) => m.t === 'arena' && m.rules?.pistolOnly && m.rules?.noJetpack);
+    assert.equal(mapMsg.id, 'hotel');
+    assert.equal(infoMsg.goal, 10);
+    assert.equal(infoMsg.timeLimit, 180);
+    assert.equal(hub.game.players[joined.slot].owned, 1 << W.pistol, 'pistolOnly restricts Open Ring weapons immediately');
+    assert.equal(hub.game.players[joined.slot].fuel, 0, 'noJetpack zeroes Open Ring jetpack fuel immediately');
+
+    // Attempt to fire rocket in Open Ring -> scrubbed to pistol without foul point penalty in idle
+    ws.send(JSON.stringify({ t: 'i', s: 1, b: BTN.FIRE, a: 0, w: W.rocket, v: hub.game.tick }));
+    await new Promise((r) => setTimeout(r, 40));
+    hub.tick();
+    assert.equal(hub.game.players[joined.slot].w, W.pistol);
+    assert.equal(hub.scores[joined.slot], 0, 'no foul penalty deducted during idle warm-up');
+
+    // Start AI duel with configured rules, then stop -> idleRules stay preserved!
+    hub.startAiExhibition({ map: 'hotel', goal: 10, timeLimit: 180, rules: { pistolOnly: true, noJetpack: true } });
+    assert.equal(hub.activeRules.pistolOnly, true);
+    hub.returnToOpenRing();
+    assert.equal(hub.activeRules.pistolOnly, true, 'configured Colosseum rules persist on return to Open Ring');
+    assert.equal(hub.activeRules.noJetpack, true);
+  } finally {
+    ws.close();
+    await srv.close();
+  }
+});
+
+
 
 
 

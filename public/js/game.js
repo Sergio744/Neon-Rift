@@ -379,6 +379,7 @@ export class ClientGame {
     ctx.translate(sx - cx, sy - cy);
     this.view.flush();
     ctx.drawImage(this.view.canvas, 0, 0);
+    this.drawLifts(ctx, cx, cy);
     this.fx.drawBack(ctx);
 
     for (const c of this.items) drawItem(ctx, c.kind, c.x, c.y, c.falling, c.t);
@@ -427,17 +428,52 @@ export class ClientGame {
     }
   }
 
+  // Animated rising chevrons inside visible Express Elevator & Waterfall Updraft shafts.
+  drawLifts(ctx, cx, cy) {
+    const lifts = this.terrain && this.terrain.lifts;
+    if (!lifts || !lifts.length) return;
+    const vx0 = cx;
+    const vy0 = cy;
+    const vx1 = cx + 800;
+    const vy1 = cy + 450;
+    const scroll = (this.time * 95) % 28;
+    ctx.save();
+    for (const L of lifts) {
+      const bx0 = L.x0 / 2;
+      const bx1 = L.x1 / 2;
+      const by0 = L.y0 / 2;
+      const by1 = L.y1 / 2;
+      if (bx1 < vx0 || bx0 > vx1 || by1 < vy0 || by0 > vy1) continue;
+      const midX = Math.round((bx0 + bx1) * 0.5);
+      const yStart = Math.max(by0 + 6, Math.floor((vy0 - 28) / 28) * 28);
+      const yEnd = Math.min(by1 - 6, vy1 + 28);
+      ctx.fillStyle = L.kind === 'updraft' ? 'rgba(126, 249, 255, 0.34)' : 'rgba(62, 230, 255, 0.42)';
+      for (let base = yStart; base <= yEnd; base += 28) {
+        const y = Math.round(base - scroll);
+        if (y < by0 + 4 || y > by1 - 4) continue;
+        // Crisp 5px pixel-art upward chevron
+        ctx.fillRect(midX - 1, y, 2, 2);
+        ctx.fillRect(midX - 3, y + 2, 2, 2);
+        ctx.fillRect(midX + 1, y + 2, 2, 2);
+        ctx.fillRect(midX - 5, y + 4, 2, 1);
+        ctx.fillRect(midX + 3, y + 4, 2, 1);
+      }
+    }
+    ctx.restore();
+  }
+
   // Bottom-left overview of maps bigger than the screen: terrain, the view box and every player.
   drawMinimap(ctx, others, me) {
     const t = this.terrain;
     const MW = t.w * 2;
     const MH = t.h * 2;
     if (MW <= 1600 && MH <= 900) return;
+    const maxH = MH > MW * 1.4 ? 136 : 64;
     let w = 132;
     let h = Math.round((w * MH) / MW);
-    if (h > 64) {
-      h = 64;
-      w = Math.round((h * MW) / MH);
+    if (h > maxH) {
+      h = maxH;
+      w = Math.max(36, Math.round((h * MW) / MH));
     }
     const x0 = 6;
     const y0 = 450 - 20 - h;

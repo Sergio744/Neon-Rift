@@ -1283,10 +1283,29 @@ input:focus {
   cursor: pointer;
 }
 
-.chip.on {
+.chip.on,
+.chip.active {
   background: var(--accent);
   color: #06121a;
   outline-color: var(--accent);
+}
+
+#ar-rules .chip.on,
+#ar-rules .chip.active,
+#w-rules .chip.on,
+#w-rules .chip.active {
+  background: #ffd23f;
+  color: #0b081a;
+  outline-color: #ffd23f;
+  font-weight: 700;
+}
+
+.ar-ally.on,
+.ar-ally.active {
+  background: #45d483 !important;
+  color: #06121a !important;
+  border-color: #45d483 !important;
+  font-weight: 700;
 }
 
 #waiting .chip {

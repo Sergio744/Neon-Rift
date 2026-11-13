@@ -1,4 +1,4 @@
-import { DT, RULES, SNAP_EVERY } from '../shared/constants.js';
+import { DT, PHYS, RULES, SNAP_EVERY } from '../shared/constants.js';
 import { MAPS, MAP_IDS } from '../shared/maps.js';
 import { mulberry32, randomSeed } from '../shared/rng.js';
 import {
@@ -66,6 +66,7 @@ export class ArenaHub {
     this.timeLimit = 120;
     this.matchTimer = 0;
     this.suddenDeath = false;
+    this.idleRules = {};
     this.activeRules = {};
     this.winner = -1;
     this.overCooldown = 0;
@@ -301,8 +302,8 @@ export class ArenaHub {
   applyPool() {
     const g = this.game;
     const drops = this.loadout === 'drops';
-    const pistolOnly = Boolean(this.state !== 'idle' && this.activeRules?.pistolOnly);
-    const noOrbs = Boolean(this.state !== 'idle' && (this.activeRules?.noOrbs || pistolOnly));
+    const pistolOnly = Boolean(this.activeRules?.pistolOnly);
+    const noOrbs = Boolean(this.activeRules?.noOrbs || pistolOnly);
     g.pool = pistolOnly ? 1 << W.pistol : this.pool;
     g.riftDrops = drops && !noOrbs;
     g.startOwned = pistolOnly ? 1 << W.pistol : drops ? poolStart(this.pool) : this.pool;
@@ -319,13 +320,75 @@ export class ArenaHub {
     const g = this.game;
     const drops = this.loadout === 'drops';
     const active = this.state === 'playing';
-    const noOrbs = Boolean(active && (this.activeRules?.noOrbs || this.activeRules?.pistolOnly));
+    const noOrbs = Boolean((active || this.state === 'idle') && (this.activeRules?.noOrbs || this.activeRules?.pistolOnly));
     g.allowFire = this.state !== 'countdown';
     g.scoring = active;
     g.cratesOn = active && !noOrbs;
     g.riftDrops = drops && !noOrbs;
     g.armoryOn = false;
     g.infiniteAmmo = this.state === 'idle' || !drops || Boolean(this.activeRules?.pistolOnly);
+  }
+
+  // Live updates Open Ring ('idle') map, goal, timer & rules when a player clicks chips in #arena-cfg!
+  configureIdle({ map, goal, timeLimit, rules } = {}) {
+    if (this.state !== 'idle') return false;
+    this.idleChallengeCd = Math.max(this.idleChallengeCd, 25);
+    if ([3, 5, 10, 15].includes(Number(goal))) this.goal = Number(goal);
+    if (timeLimit !== undefined) this.timeLimit = sanitizeTimeLimit(timeLimit, this.timeLimit);
+    let mapChanged = false;
+    if (map && MAPS[map] && !MAPS[map].hidden && map !== this.mapId) {
+      this.mapId = map;
+      mapChanged = true;
+    }
+    if (rules !== undefined) {
+      this.idleRules = sanitizeRules(rules);
+      this.activeRules = { ...this.idleRules };
+    }
+    this.applyPool();
+    this.applyRules();
+
+    if (mapChanged) {
+      for (const a of [...this.actors.values()]) this.unseatFromRing(a);
+      this.game.reset(this.mapId, randomSeed());
+      this.applyRules();
+      for (const h of this.humanActors) this.seatInOpenRing(h, -1);
+      for (const ai of this.aiActors) {
+        if (this.freeRingSlot() >= 0) this.seatInOpenRing(ai, -1);
+      }
+      for (let s = 0; s < MAX_FIGHTERS; s++) {
+        if (!this.game.present[s]) continue;
+        if (this.activeRules?.pistolOnly) {
+          this.game.players[s].owned = 1 << W.pistol;
+          this.game.players[s].w = W.pistol;
+        }
+        if (this.activeRules?.noJetpack) this.game.players[s].fuel = 0;
+      }
+      this.applyTeams();
+      this.game.takeEvents();
+      const mapPayload = this.mapMsg();
+      for (const h of this.humanActors) {
+        send(h.client, {
+          t: 'arena_role',
+          slot: h.slot,
+          team: -1,
+          spectating: h.slot < 0,
+        });
+        send(h.client, mapPayload);
+      }
+    } else {
+      for (let s = 0; s < MAX_FIGHTERS; s++) {
+        if (!this.game.present[s]) continue;
+        const p = this.game.players[s];
+        p.owned = this.activeRules?.pistolOnly ? 1 << W.pistol : this.pool;
+        if (this.activeRules?.pistolOnly) p.w = W.pistol;
+        p.fuel = this.activeRules?.noJetpack ? 0 : PHYS.FUEL_MAX;
+      }
+      for (const h of this.humanActors) {
+        send(h.client, { t: 'pool', wp: this.game.pool });
+      }
+    }
+    this.broadcast(this.info());
+    return true;
   }
 
   broadcast(msg) {
@@ -760,7 +823,7 @@ export class ArenaHub {
     this.timer = 0;
     this.matchTimer = 0;
     this.suddenDeath = false;
-    this.activeRules = {};
+    this.activeRules = { ...(this.idleRules || {}) };
     this.activeSos = null;
     this.winner = -1;
     this.idleChallengeCd = 7.5;
@@ -909,8 +972,13 @@ export class ArenaHub {
           const candidates = humans.length > 0 ? humans : [...this.actors.values()].filter((a) => a.id !== challenger.id);
           if (candidates.length > 0) {
             const target = candidates[Math.floor(this.rng() * candidates.length)];
-            const mapPick = MAP_IDS[Math.floor(this.rng() * MAP_IDS.length)];
-            const rules = this.rng() < 0.45 ? { ...(challenger.profile?.favRules || {}) } : {};
+            const userHasRules = hasAnyRule(this.idleRules);
+            const mapPick = userHasRules ? this.mapId : MAP_IDS[Math.floor(this.rng() * MAP_IDS.length)];
+            const rules = userHasRules
+              ? { ...this.idleRules }
+              : this.rng() < 0.45
+                ? { ...(challenger.profile?.favRules || {}) }
+                : {};
             let allies0 = [];
             let allies1 = [];
             const spare = [...this.actors.values()].filter((a) => a.id !== challenger.id && a.id !== target.id);
@@ -996,7 +1064,7 @@ export class ArenaHub {
   }
 
   tick() {
-    const enforce = this.state === 'playing' && hasAnyRule(this.activeRules);
+    const enforce = (this.state === 'playing' || this.state === 'idle') && hasAnyRule(this.activeRules);
     for (let s = 0; s < MAX_FIGHTERS; s++) {
       if (this.foulCd[s] > 0) this.foulCd[s] = Math.max(0, this.foulCd[s] - DT);
     }
@@ -1004,7 +1072,7 @@ export class ArenaHub {
     processInputs(this.clients, (s, rawInp) => {
       if (enforce) {
         const { inp, foul } = enforceRulesOnInput(this.activeRules, this.game.players[s], rawInp);
-        if (foul) this.handleFoul(s, foul);
+        if (foul && this.state === 'playing') this.handleFoul(s, foul);
         this.game.applyInput(s, inp);
       } else {
         this.game.applyInput(s, rawInp);
@@ -1021,6 +1089,11 @@ export class ArenaHub {
     }
 
     this.game.update();
+    if (enforce && this.activeRules?.noJetpack) {
+      for (let s = 0; s < MAX_FIGHTERS; s++) {
+        if (this.game.present[s]) this.game.players[s].fuel = 0;
+      }
+    }
 
     if (this.state === 'countdown') {
       this.timer -= DT;

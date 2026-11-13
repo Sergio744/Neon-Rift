@@ -2,7 +2,7 @@ import { TEAM_COLORS, TEAM_NAMES } from '/shared/modes.js';
 import { RULE_DEFS, TIME_LIMITS, formatClock } from '/shared/rules.js';
 import { tr } from '../i18n.js';
 import { settingRow } from './controls.js';
-import { sizeTag } from './room.js';
+import { mapDisplayName, sizeTag } from './room.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -23,6 +23,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
   let dismissedSosId = null;
   let myActorId = null;
   let latestMsg = null;
+  let cfgDirtyUntil = 0;
 
   const box = $('#arena-box');
   const foldBtn = $('#btn-arena-fold');
@@ -167,7 +168,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     }
 
     const m = maps().find((x) => x.id === msg.map);
-    $('#map-text').textContent = m ? m.name : msg.map;
+    $('#map-text').textContent = m ? mapDisplayName(m) : msg.map;
 
     const timerEl = $('#timer-text');
     if (timerEl) {
@@ -181,16 +182,36 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
 
     const rulesBar = $('#active-rules-bar');
     if (rulesBar) {
-      const activeIds = RULE_DEFS.filter((d) => msg.rules?.[d.id]);
-      rulesBar.classList.toggle('hidden', activeIds.length === 0 || msg.st === 'idle');
+      const effectiveRules = msg.st === 'idle' && Object.keys(draftRules).some((k) => draftRules[k]) ? draftRules : msg.rules;
+      const activeIds = RULE_DEFS.filter((d) => effectiveRules?.[d.id]);
+      rulesBar.classList.toggle('hidden', activeIds.length === 0);
       rulesBar.textContent = '';
       for (const r of activeIds) rulesBar.appendChild(el('span', 'rule-pill', tr(`rule_${r.id}`)));
     }
   }
 
+  function pushIdleCfg() {
+    cfgDirtyUntil = performance.now() + 600;
+    net.send({
+      t: 'arena_cfg',
+      map: draftMap,
+      goal: draftGoal,
+      timeLimit: draftTimer,
+      rules: draftRules,
+    });
+  }
+
   function renderHub(msg) {
+    const fromServer = msg !== latestMsg;
     latestMsg = msg;
     if (!box) return;
+    if (fromServer && msg.st === 'idle' && performance.now() >= cfgDirtyUntil) {
+      if (msg.map) draftMap = msg.map;
+      if (msg.goal) draftGoal = msg.goal;
+      if (msg.timeLimit !== undefined) draftTimer = msg.timeLimit;
+      if (msg.rules) draftRules = { ...msg.rules };
+    }
+    const prevScroll = box.scrollTop;
     box.classList.remove('hidden');
 
     // Auto-fold hub when a match starts (whether fighting OR spectating!) so the screen is wide open!
@@ -243,13 +264,17 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
       row.append(badge, nm, rec);
 
       if (!isMe && canChallenge) {
+        const isAlly = myAllies.has(actor.id);
         const allyBtn = el(
           'button',
-          `btn small ar-ally${myAllies.has(actor.id) ? ' active' : ''}`,
-          myAllies.has(actor.id) ? tr('allyPicked') : tr('allyToggle'),
+          `btn small ar-ally${isAlly ? ' on active' : ''}`,
+          isAlly ? `✓ ${tr('allyPicked')}` : tr('allyToggle'),
         );
         allyBtn.type = 'button';
-        allyBtn.addEventListener('click', () => {
+        allyBtn.setAttribute('aria-pressed', String(isAlly));
+        allyBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          sfx.play('switch');
           if (myAllies.has(actor.id)) myAllies.delete(actor.id);
           else {
             if (myAllies.size >= 2) myAllies.clear();
@@ -299,32 +324,44 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     const cfgBox = $('#arena-cfg');
     cfgBox.classList.toggle('hidden', msg.st !== 'idle');
     if (msg.st === 'idle') {
-      const mapItems = maps().map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+      const mapItems = maps().map((m) => ({ id: m.id, name: mapDisplayName(m), tag: sizeTag(m) }));
       if (!mapItems.some((m) => m.id === draftMap) && mapItems[0]) draftMap = mapItems[0].id;
       settingRow($('#ar-maps'), tr('mapLabel'), mapItems, draftMap, (id) => {
+        sfx.play('switch');
         draftMap = id;
+        pushIdleCfg();
         renderHub(latestMsg);
       });
       const goals = [3, 5, 10].map((g) => ({ id: g, name: String(g) }));
       settingRow($('#ar-goal'), tr('pointsToWin'), goals, draftGoal, (g) => {
+        sfx.play('switch');
         draftGoal = g;
+        pushIdleCfg();
         renderHub(latestMsg);
       });
       const timers = TIME_LIMITS.map((s) => ({ id: s, name: s === 0 ? tr('unlimitedTime') : formatClock(s) }));
       settingRow($('#ar-timer'), tr('timerLabel'), timers, draftTimer, (t) => {
+        sfx.play('switch');
         draftTimer = t;
+        pushIdleCfg();
         renderHub(latestMsg);
       });
       const rulesEl = $('#ar-rules');
       rulesEl.textContent = '';
-      rulesEl.className = 'w-row';
-      rulesEl.appendChild(el('span', 'w-label', tr('rulesLabel')));
+      rulesEl.className = 'setting';
+      rulesEl.appendChild(el('span', 'setting-label', tr('rulesLabel')));
       const list = el('div', 'chips');
       for (const r of RULE_DEFS) {
-        const b = el('button', `chip${draftRules[r.id] ? ' active' : ''}`, tr(`rule_${r.id}`));
+        const on = Boolean(draftRules[r.id]);
+        const b = el('button', `chip${on ? ' on active' : ''}`, `${on ? '✓ ' : ''}${tr(`rule_${r.id}`)}`);
         b.type = 'button';
-        b.addEventListener('click', () => {
-          draftRules = { ...draftRules, [r.id]: !draftRules[r.id] };
+        b.setAttribute('aria-pressed', String(on));
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          sfx.play('switch');
+          draftRules = { ...draftRules, [r.id]: !on };
+          if (!draftRules[r.id]) delete draftRules[r.id];
+          pushIdleCfg();
           renderHub(latestMsg);
         });
         list.appendChild(b);
@@ -336,6 +373,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     renderChallengeAlert(msg.challenge);
     // Active SOS reinforcement banner for spectators!
     renderSosAlert(msg.sos);
+    box.scrollTop = prevScroll;
   }
 
   function renderChallengeAlert(ch) {

@@ -289,7 +289,38 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
       if (bot.los || bot.shaftT <= 0) bot.shaftX = null;
     }
 
-    if (!bot.los && bot.shaftX !== null) {
+    if (!bot.los && t.lifts && t.lifts.length && Math.abs(target.y - p.y) > 90) {
+      // Multi-storey skyscraper / gorge updraft navigation: sprint to the nearest Express Lift shaft
+      // and ride it straight to the enemy's floor!
+      let bestLift = null;
+      let bestDx = Infinity;
+      for (const L of t.lifts) {
+        if (p.y < L.y0 - 40 || p.y > L.y1 + 40) continue;
+        const lcx = (L.x0 + L.x1) * 0.5;
+        const dxl = Math.abs(lcx - p.x);
+        if (dxl < bestDx) {
+          bestDx = dxl;
+          bestLift = L;
+        }
+      }
+      if (bestLift) {
+        const lcx = (bestLift.x0 + bestLift.x1) * 0.5;
+        if (Math.abs(p.x - lcx) > 13) {
+          move = lcx > p.x ? 1 : -1;
+          wantUp = false;
+          wantDown = false;
+          const way = findDigPoint(t, p, move, 28);
+          if (way.kind === 'breakable') {
+            wantDig = true;
+            digPoint = way;
+          }
+        } else {
+          move = 0;
+          wantUp = target.y < p.y - 30;
+          wantDown = target.y > p.y + 30;
+        }
+      }
+    } else if (!bot.los && bot.shaftX !== null) {
       const roofAbove = probeAhead(t, p.x, p.y - 56, 0, -1, 52);
       if (Math.abs(bot.shaftX - p.x) > 12) {
         move = bot.shaftX > p.x ? 1 : -1;
@@ -459,6 +490,8 @@ export function stepArenaBot(room, slot, bot, rng = Math.random) {
 
   if (bot.jumpHoldT > 0) {
     bot.jumpHoldT = Math.max(0, bot.jumpHoldT - DT);
+    b |= BTN.JUMP;
+  } else if (wantUp && t.inLift && t.inLift(p.x, p.y - PHYS.HEIGHT * 0.5)) {
     b |= BTN.JUMP;
   } else if (wantUp && !rules?.noJetpack && p.fuel > 16) {
     // Release for 1 tick if grounded so `pressed & BTN.JUMP` initiates lift-off, then hold to ignite jetpack!

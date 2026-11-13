@@ -1,11 +1,11 @@
 import {
-  MAT_ANCHOR, MAT_BEAM, MAT_BEDROCK, MAT_BUILD, MAT_DECOR, MAT_EMPTY, MAT_GLASS, MAT_METAL, MAT_PLANK,
-  MAT_PLATFORM, MAT_ROCK, MAT_SAND, MAT_SOLID, MAT_TNT, MAT_WOOD,
+  MAT_ANCHOR, MAT_BEAM, MAT_BEDROCK, MAT_BOUNCE, MAT_BUILD, MAT_DECOR, MAT_EMPTY, MAT_GLASS, MAT_METAL,
+  MAT_PLANK, MAT_PLATFORM, MAT_ROCK, MAT_SAND, MAT_SOLID, MAT_TNT, MAT_WOOD,
 } from './constants.js';
 
 // Material property tables, indexed by material id. Every terrain query goes through these
 // typed arrays so adding a material is one row here.
-const N = 16;
+const N = 18;
 export const COLLIDE = new Uint8Array(N); // stops players
 export const SHOT = new Uint8Array(N); // stops bullets and projectiles
 export const ONEWAY = new Uint8Array(N); // stand on top, pass from below
@@ -35,6 +35,7 @@ const rows = {
   // Builder pieces stay where they were placed: outside the structure graph, so they never fall
   // and never hold map structures up, but falling pieces and sand land on them.
   [MAT_BUILD]: { collide: 1, shot: 1, hard: 0.75 },
+  [MAT_BOUNCE]: { ...T, burn: 1, hard: 1.1 },
 };
 for (const [m, r] of Object.entries(rows)) {
   COLLIDE[m] = r.collide | 0;
