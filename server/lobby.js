@@ -214,6 +214,16 @@ export class Lobby {
       case 'arena_stop':
         if (client.room instanceof ArenaHub) client.room.stopAiMatch();
         break;
+      case 'arena_cfg':
+        if (client.room instanceof ArenaHub) {
+          client.room.configureIdle({
+            map: msg.map,
+            goal: msg.goal,
+            timeLimit: msg.timeLimit,
+            rules: msg.rules,
+          });
+        }
+        break;
       case 'challenge':
         if (client.room instanceof ArenaHub) {
           const actor = client.room.actorForClient(client);

@@ -213,11 +213,13 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
       const list = el('div', 'chips');
       const curRules = msg.rules || {};
       for (const r of RULE_DEFS.filter((d) => d.id !== 'noSos')) {
-        const b = el('button', `chip${curRules[r.id] ? ' active' : ''}`, tr(`rule_${r.id}`));
+        const on = Boolean(curRules[r.id]);
+        const b = el('button', `chip${on ? ' on active' : ''}`, `${on ? '✓ ' : ''}${tr(`rule_${r.id}`)}`);
         b.type = 'button';
         b.disabled = !host;
+        b.setAttribute('aria-pressed', String(on));
         b.addEventListener('click', () => {
-          const next = { ...curRules, [r.id]: !curRules[r.id] };
+          const next = { ...curRules, [r.id]: !on };
           net.send({ t: 'setopts', rules: next });
         });
         list.appendChild(b);

@@ -1037,6 +1037,85 @@ test('GRAND HOTEL (55 floors) & AMAZON JUNGLE maps, Express Elevators, Bouncy Fu
   assert.equal(jg.terrain.lifts.length, 2);
 });
 
+test('Rift Colosseum rule chips highlight (.chip.on) and arena_cfg applies rules & map live in Open Ring + challenges', async () => {
+  const fs = await import('node:fs/promises');
+  const [arenaJs, roomJs, css] = await Promise.all([
+    fs.readFile(new URL('../public/js/ui/arena.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../public/js/ui/room.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../public/style.css', import.meta.url), 'utf8'),
+  ]);
+  assert.ok(arenaJs.includes("chip${on ? ' on active' : ''}"), 'arena.js toggles .on class on rule chips');
+  assert.ok(roomJs.includes("chip${on ? ' on active' : ''}"), 'room.js toggles .on class on rule chips');
+  assert.ok(css.includes('#ar-rules .chip.on'), 'style.css highlights selected Colosseum rule chips');
+
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`);
+  const msgs = [];
+  let waiters = [];
+  ws.on('message', (d) => {
+    const m = JSON.parse(d.toString());
+    msgs.push(m);
+    waiters = waiters.filter((w) => !w(m));
+  });
+  const wait = (pred, ms = 4000) =>
+    new Promise((res, rej) => {
+      const found = msgs.find(pred);
+      if (found) return res(found);
+      const to = setTimeout(() => rej(new Error('timeout')), ms);
+      waiters.push((m) => {
+        if (!pred(m)) return false;
+        clearTimeout(to);
+        res(m);
+        return true;
+      });
+    });
+
+  try {
+    await new Promise((r) => ws.on('open', r));
+    ws.send(JSON.stringify({ t: 'arena', name: 'sergio', priv: true, autoAi: false, initialAis: 1 }));
+    const joined = await wait((m) => m.t === 'joined' && m.mode === 'arena');
+    const hub = srv.lobby.rooms.get(joined.code);
+    assert.ok(hub instanceof ArenaHub);
+
+    msgs.length = 0;
+    ws.send(
+      JSON.stringify({
+        t: 'arena_cfg',
+        map: 'hotel',
+        goal: 10,
+        timeLimit: 180,
+        rules: { pistolOnly: true, noJetpack: true },
+      }),
+    );
+
+    const mapMsg = await wait((m) => m.t === 'map' && m.id === 'hotel');
+    const infoMsg = await wait((m) => m.t === 'arena' && m.rules?.pistolOnly && m.rules?.noJetpack);
+    assert.equal(mapMsg.id, 'hotel');
+    assert.equal(infoMsg.goal, 10);
+    assert.equal(infoMsg.timeLimit, 180);
+    assert.equal(hub.game.players[joined.slot].owned, 1 << W.pistol, 'pistolOnly restricts Open Ring weapons immediately');
+    assert.equal(hub.game.players[joined.slot].fuel, 0, 'noJetpack zeroes Open Ring jetpack fuel immediately');
+
+    // Attempt to fire rocket in Open Ring -> scrubbed to pistol without foul point penalty in idle
+    ws.send(JSON.stringify({ t: 'i', s: 1, b: BTN.FIRE, a: 0, w: W.rocket, v: hub.game.tick }));
+    await new Promise((r) => setTimeout(r, 40));
+    hub.tick();
+    assert.equal(hub.game.players[joined.slot].w, W.pistol);
+    assert.equal(hub.scores[joined.slot], 0, 'no foul penalty deducted during idle warm-up');
+
+    // Start AI duel with configured rules, then stop -> idleRules stay preserved!
+    hub.startAiExhibition({ map: 'hotel', goal: 10, timeLimit: 180, rules: { pistolOnly: true, noJetpack: true } });
+    assert.equal(hub.activeRules.pistolOnly, true);
+    hub.returnToOpenRing();
+    assert.equal(hub.activeRules.pistolOnly, true, 'configured Colosseum rules persist on return to Open Ring');
+    assert.equal(hub.activeRules.noJetpack, true);
+  } finally {
+    ws.close();
+    await srv.close();
+  }
+});
+
+
 
 
 
