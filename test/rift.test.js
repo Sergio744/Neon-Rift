@@ -1115,6 +1115,35 @@ test('Rift Colosseum rule chips highlight (.chip.on) and arena_cfg applies rules
   }
 });
 
+test('Neon Rift custom pixel-art favicon, Apple touch icon, OpenGraph icon & PWA manifest serve cleanly', async () => {
+  const srv = await startServer({ port: 0, host: '127.0.0.1' });
+  try {
+    const base = `http://127.0.0.1:${srv.port}`;
+    const htmlRes = await fetch(`${base}/`);
+    const html = await htmlRes.text();
+    assert.ok(html.includes('/favicon-32.png'), 'index.html links custom 32x32 favicon');
+    assert.ok(html.includes('/apple-touch-icon.png'), 'index.html links Apple touch icon');
+    assert.ok(html.includes('/manifest.webmanifest'), 'index.html links PWA manifest');
+
+    for (const [p, expectedType] of [
+      ['/favicon.ico', 'image/x-icon'],
+      ['/favicon-32.png', 'image/png'],
+      ['/favicon-64.png', 'image/png'],
+      ['/apple-touch-icon.png', 'image/png'],
+      ['/icon-192.png', 'image/png'],
+      ['/icon-512.png', 'image/png'],
+      ['/manifest.webmanifest', 'application/manifest+json'],
+    ]) {
+      const r = await fetch(`${base}${p}`);
+      assert.equal(r.status, 200, `${p} returns 200`);
+      assert.ok((r.headers.get('content-type') || '').startsWith(expectedType), `${p} serves ${expectedType}`);
+    }
+  } finally {
+    await srv.close();
+  }
+});
+
+
 
 
 
