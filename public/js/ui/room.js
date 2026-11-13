@@ -28,11 +28,18 @@ export function slotColor(msg, s) {
   return PLAYER_COLORS[s % PLAYER_COLORS.length];
 }
 
-// Size tag from the map area: one screen is SMALL.
+export function mapDisplayName(m) {
+  const key = `map_${m.id}`;
+  const loc = tr(key);
+  return loc !== key ? loc : m.name;
+}
+
+// Size tag from the map area: one screen is SMALL; skyscraper maps show their floor count.
 export function sizeTag(m) {
   if (!m.w) return '';
+  if (m.id === 'hotel') return tr('sizeTower');
   const screens = (m.w * m.h) / (1600 * 900);
-  return screens <= 1.05 ? 'SMALL' : screens <= 2.2 ? 'LARGE' : 'HUGE';
+  return screens <= 1.05 ? tr('sizeSmall') : screens <= 2.2 ? tr('sizeLarge') : tr('sizeHuge');
 }
 
 // Present slots, best first (kills, then fewest deaths).
@@ -68,7 +75,7 @@ export function createRoomUi({ game, net, maps, pools, onCopy, onPark }) {
     fold.setAttribute('aria-expanded', String(!on));
   };
   fold.addEventListener('click', () => setFolded(!$('#waiting').classList.contains('folded')));
-  const mapItems = () => maps().map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+  const mapItems = () => maps().map((m) => ({ id: m.id, name: mapDisplayName(m), tag: sizeTag(m) }));
 
   function playerTag(msg, s, allowManage = false) {
     const isBot = Boolean(msg.bots?.[s]);

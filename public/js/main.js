@@ -16,7 +16,7 @@ import { chips, poolPicker, settingRow } from './ui/controls.js';
 import { createArenaUi } from './ui/arena.js';
 import { createFeel } from './ui/feel.js';
 import { createHud } from './ui/hud.js';
-import { createRoomUi, isGroup, ranking, sizeTag, slotColor } from './ui/room.js';
+import { createRoomUi, isGroup, mapDisplayName, ranking, sizeTag, slotColor } from './ui/room.js';
 
 const $ = (sel) => document.querySelector(sel);
 const canvas = $('#view');
@@ -353,7 +353,7 @@ function enterSurvival(m) {
   center('', '', false);
 }
 
-const survivalMapItems = () => maps.map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+const survivalMapItems = () => maps.map((m) => ({ id: m.id, name: mapDisplayName(m), tag: sizeTag(m) }));
 const loadoutItems = () => [
   { id: 'drops', name: tr('riftDrops') },
   { id: 'full', name: tr('fullArsenal') },

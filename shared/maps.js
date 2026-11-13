@@ -1,5 +1,7 @@
 import { CELL, GRID_H, GRID_W } from './constants.js';
 import { buildCanyon } from './maps/canyon.js';
+import { buildHotel } from './maps/hotel.js';
+import { buildJungle } from './maps/jungle.js';
 import { buildLanding } from './maps/landing.js';
 import { buildMine } from './maps/mine.js';
 import { buildNeon } from './maps/neon.js';
@@ -37,6 +39,56 @@ export const MAPS = {
       [800, 210],
       [560, 740],
       [1040, 740],
+    ],
+  },
+  hotel: {
+    name: 'GRAND HOTEL',
+    w: 960,
+    h: 2724,
+    crystals: false,
+    build: buildHotel,
+    spawns: [
+      [620, 5330],
+      [1300, 5330],
+      [180, 5330],
+      [1740, 5330],
+      [500, 4660],
+      [1420, 4660],
+      [500, 4110],
+      [1420, 4110],
+      [500, 3470],
+      [1420, 3470],
+      [510, 2090],
+      [1410, 2090],
+      [510, 1350],
+      [1410, 1350],
+      [530, 350],
+      [1390, 350],
+      [490, 250],
+      [1280, 250],
+    ],
+  },
+  jungle: {
+    name: 'AMAZON JUNGLE',
+    w: 1800,
+    h: 740,
+    crystals: false,
+    build: buildJungle,
+    spawns: [
+      [210, 860],
+      [3390, 860],
+      [500, 510],
+      [3100, 510],
+      [760, 960],
+      [2840, 960],
+      [1110, 460],
+      [2490, 460],
+      [1180, 860],
+      [2420, 860],
+      [1620, 1020],
+      [1980, 1020],
+      [1800, 900],
+      [1800, 240],
     ],
   },
   landing: {

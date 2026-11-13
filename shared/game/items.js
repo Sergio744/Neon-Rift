@@ -11,8 +11,49 @@ const r1 = (v) => Math.round(v * 10) / 10;
 
 // Pickups falling from the sky or dropped by the dead, contextual mystery weapon drops, and Rift boost orbs.
 export const items = {
-  dropItem(kind, x, y = -30) {
+  // On roofed multi-storey skyscraper maps (`hotel`), Rift Room Service materializes drops inside
+  // active interior floors near fighters instead of landing everything on the 55th-floor roof.
+  hotelDropPos(preferX) {
+    const live = [];
+    for (let s = 0; s < this.n; s++) {
+      const p = this.players[s];
+      if (this.present[s] && !p.dead) live.push(p);
+    }
+    for (let tries = 0; tries < 8; tries++) {
+      let tx;
+      let baseY;
+      if (live.length && this.rng() < 0.78) {
+        const ref = live[Math.floor(this.rng() * live.length)];
+        tx = (preferX ?? ref.x) + (this.rng() - 0.5) * 320;
+        const floorShift = (Math.floor(this.rng() * 5) - 2) * 92;
+        baseY = Math.max(250, Math.min(this.worldH - 70, ref.y + floorShift - 46));
+      } else {
+        const [sx, sy] = this.spawns[Math.floor(this.rng() * this.spawns.length)];
+        tx = sx + (this.rng() - 0.5) * 140;
+        baseY = sy;
+      }
+      tx = Math.max(330, Math.min(this.worldW - 330, tx));
+      const standY = this.terrain.findStand(tx, baseY);
+      const dropY = standY - 28;
+      if (dropY > 120 && !this.terrain.rectBlocksShot(tx - 14, dropY - 16, tx + 14, dropY)) {
+        return { x: tx, y: dropY };
+      }
+    }
+    const [sx, sy] = this.spawns[0];
+    return { x: sx, y: this.terrain.findStand(sx, sy) - 26 };
+  },
+
+  dropItem(kind, x, y) {
     if (this.items.length >= MAX_ITEMS) return null;
+    if (y === undefined) {
+      if (this.mapId === 'hotel') {
+        const pos = this.hotelDropPos(x);
+        x = pos.x;
+        y = pos.y;
+      } else {
+        y = -30;
+      }
+    }
     x = Math.max(40, Math.min(this.worldW - 40, x));
     const it = { id: this.nextId++, kind, x, y, vy: 0, t: 0 };
     this.items.push(it);
@@ -28,7 +69,7 @@ export const items = {
     return this.dropItem(ITEM.MYSTERY, x ?? this.contextualDropX());
   },
 
-  dropOrb(x, y = -30) {
+  dropOrb(x, y) {
     return this.dropItem(ITEM.ORB, x ?? this.randomDropX(), y);
   },
 

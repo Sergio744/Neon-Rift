@@ -196,6 +196,12 @@ export const STRINGS = {
     touchAimHint: 'AIM & FIRE',
     fullscreen: 'FULLSCREEN',
     rotateHint: 'ROTATE TO LANDSCAPE OR TAP ⛶ FOR FULL COMFORT',
+    map_hotel: 'GRAND HOTEL',
+    map_jungle: 'AMAZON JUNGLE',
+    sizeSmall: 'SMALL',
+    sizeLarge: 'LARGE',
+    sizeHuge: 'HUGE',
+    sizeTower: '55 FLOORS',
   },
   fr: {
     tagline: 'SHOOTER STICKMAN COMMUNAUTAIRE SUR CARTES DESTRUCTIBLES',
@@ -390,6 +396,12 @@ export const STRINGS = {
     touchAimHint: 'VISER & TIR',
     fullscreen: 'PLEIN ÉCRAN',
     rotateHint: "TOURNEZ L'ÉCRAN EN PAYSAGE OU APPUYEZ SUR ⛶",
+    map_hotel: 'GRAND HÔTEL',
+    map_jungle: 'LA JUNGLE',
+    sizeSmall: 'PETIT',
+    sizeLarge: 'GRAND',
+    sizeHuge: 'GÉANT',
+    sizeTower: '55 ÉTAGES',
   },
 };
 

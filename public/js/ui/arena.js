@@ -2,7 +2,7 @@ import { TEAM_COLORS, TEAM_NAMES } from '/shared/modes.js';
 import { RULE_DEFS, TIME_LIMITS, formatClock } from '/shared/rules.js';
 import { tr } from '../i18n.js';
 import { settingRow } from './controls.js';
-import { sizeTag } from './room.js';
+import { mapDisplayName, sizeTag } from './room.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -167,7 +167,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     }
 
     const m = maps().find((x) => x.id === msg.map);
-    $('#map-text').textContent = m ? m.name : msg.map;
+    $('#map-text').textContent = m ? mapDisplayName(m) : msg.map;
 
     const timerEl = $('#timer-text');
     if (timerEl) {
@@ -299,7 +299,7 @@ export function createArenaUi({ game, net, maps, sfx, onCopy }) {
     const cfgBox = $('#arena-cfg');
     cfgBox.classList.toggle('hidden', msg.st !== 'idle');
     if (msg.st === 'idle') {
-      const mapItems = maps().map((m) => ({ id: m.id, name: m.name, tag: sizeTag(m) }));
+      const mapItems = maps().map((m) => ({ id: m.id, name: mapDisplayName(m), tag: sizeTag(m) }));
       if (!mapItems.some((m) => m.id === draftMap) && mapItems[0]) draftMap = mapItems[0].id;
       settingRow($('#ar-maps'), tr('mapLabel'), mapItems, draftMap, (id) => {
         draftMap = id;

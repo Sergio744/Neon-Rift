@@ -1,6 +1,6 @@
 import {
-  CELL, GRID_H, GRID_W, MAT_BEDROCK, MAT_DECOR, MAT_EMPTY, MAT_PLATFORM, MAT_SAND, MAT_SOLID, PHYS,
-  WORLD_H, WORLD_W,
+  CELL, GRID_H, GRID_W, MAT_BEDROCK, MAT_BOUNCE, MAT_DECOR, MAT_EMPTY, MAT_PLATFORM, MAT_SAND, MAT_SOLID,
+  PHYS, WORLD_H, WORLD_W,
 } from './constants.js';
 import { COLLIDE, HARD, ONEWAY, SHOT } from './materials.js';
 
@@ -21,6 +21,26 @@ export class Terrain {
     this.cw = Math.ceil(w / CHUNK);
     this.ch = Math.ceil(h / CHUNK);
     this.dirty = new Uint8Array(this.cw * this.ch).fill(1);
+    this.lifts = []; // vertical express elevator / updraft shafts: { x0, y0, x1, y1 } in world px
+  }
+
+  // Registers a vertical express lift / updraft shaft using cell coordinates [cx0, cy0, cx1, cy1).
+  addLift(cx0, cy0, cx1, cy1, kind = 'lift') {
+    this.lifts.push({
+      x0: cx0 * CELL,
+      y0: cy0 * CELL,
+      x1: cx1 * CELL,
+      y1: cy1 * CELL,
+      kind,
+    });
+  }
+
+  inLift(x, y) {
+    for (let i = 0; i < this.lifts.length; i++) {
+      const L = this.lifts[i];
+      if (x >= L.x0 && x <= L.x1 && y >= L.y0 && y <= L.y1) return L;
+    }
+    return null;
   }
 
   cell(cx, cy) {
@@ -108,6 +128,19 @@ export class Terrain {
     const cx1 = Math.min(this.w - 1, Math.floor((x1 - 1e-6) / CELL));
     const row = cy * this.w;
     for (let cx = cx0; cx <= cx1; cx++) if (ONEWAY[this.mat[row + cx]]) return true;
+    return false;
+  }
+
+  // True when the surface immediately beneath the feet (`y .. y + 1.5px`) contains a bouncy cell.
+  hasBounceUnder(x0, x1, y) {
+    const cx0 = Math.max(0, Math.floor(x0 / CELL));
+    const cx1 = Math.min(this.w - 1, Math.floor((x1 - 1e-6) / CELL));
+    const cy0 = Math.max(0, Math.floor(y / CELL));
+    const cy1 = Math.min(this.h - 1, Math.floor((y + CELL * 0.8) / CELL));
+    for (let cy = cy0; cy <= cy1; cy++) {
+      const row = cy * this.w;
+      for (let cx = cx0; cx <= cx1; cx++) if (this.mat[row + cx] === MAT_BOUNCE) return true;
+    }
     return false;
   }
 
