@@ -5,7 +5,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-45d483.svg)](package.json)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff4d9d.svg)](CONTRIBUTING.md)
 
-**[🇬🇧 English](#english) · [🇫🇷 Français](#français) · [🤝 Contributing](CONTRIBUTING.md) · [🗺️ Roadmap](ROADMAP.md) · [🚀 Free Hosting Guide](DEPLOY.md)**
+**[▶ Play the game](https://neon-rift-0we0.onrender.com/) · [🌐 Landing page (GitHub Pages)](https://sergio744.github.io/Neon-Rift/) · [🇬🇧 English](#english) · [🇫🇷 Français](#français) · [🤝 Contributing](CONTRIBUTING.md) · [🗺️ Roadmap](ROADMAP.md) · [🚀 Free Hosting Guide](DEPLOY.md)**
 
 ---
 

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neon Rift — Jeu stickman destructible gratuit &amp; open-source</title>
+    <meta
+      name="description"
+      content="Neon Rift — jeu de tir stickman multijoueur 100 % gratuit et open-source sur des cartes pixels intégralement destructibles : duels 1v1, salons jusqu'à 8 joueurs, survie solo et co-op. Inspiré de Stick Duel."
+    />
+    <meta name="theme-color" content="#080614" />
+    <meta property="og:title" content="Neon Rift — Open-Source Destructible Stickman Shooter" />
+    <meta
+      property="og:description"
+      content="1v1 duels, 8-player FFA & teams, solo and 4-player co-op survival on falling-sand maps. Free & community-driven."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sergio744.github.io/Neon-Rift/" />
+    <meta property="og:image" content="https://sergio744.github.io/Neon-Rift/assets/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:image" content="https://sergio744.github.io/Neon-Rift/assets/icon-512.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+    <link rel="shortcut icon" href="assets/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#contenu" data-i18n="skip">Aller au contenu</a>
+
+    <header class="site-header">
+      <div class="wrap header-in">
+        <a class="brand" href="#accueil" aria-label="Neon Rift — accueil">
+          <img src="assets/icon-192.png" alt="" width="36" height="36" />
+          <span class="brand-name">NEON <em>RIFT</em></span>
+        </a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav" data-i18n-aria="menu" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+        <nav id="nav" class="nav" aria-label="Navigation principale">
+          <a href="#modes" data-i18n="navModes">Modes</a>
+          <a href="#maps" data-i18n="navMaps">Arènes</a>
+          <a href="#armes" data-i18n="navWeapons">Armes</a>
+          <a href="#jouer" data-i18n="navPlay">Jouer</a>
+          <a href="#opensource" data-i18n="navOss">Open Source</a>
+          <a href="#credits" data-i18n="navCredits">Crédits</a>
+        </nav>
+        <div class="header-actions">
+          <div class="lang" role="group" aria-label="Langue / Language">
+            <button type="button" class="lang-btn is-on" data-lang="fr" aria-pressed="true">FR</button>
+            <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+          </div>
+          <a class="btn btn-ghost btn-sm" href="https://github.com/Sergio744/Neon-Rift" target="_blank" rel="noopener">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+            GitHub
+          </a>
+          <a class="btn btn-primary btn-sm" href="https://neon-rift-0we0.onrender.com/" target="_blank" rel="noopener" data-i18n="ctaPlay">▶ Jouer</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="contenu">
+      <!-- ============ HERO ============ -->
+      <section class="hero" id="accueil">
+        <canvas id="sand" aria-hidden="true"></canvas>
+        <div class="wrap hero-in">
+          <div class="hero-copy">
+            <p class="badge" data-i18n="heroBadge">100 % GRATUIT · OPEN SOURCE · LICENCE MIT</p>
+            <h1><span class="t-cyan">NEON</span> <span class="t-pink">RIFT</span></h1>
+            <p class="tagline" data-i18n="heroTagline">Le jeu de tir stickman où tout est destructible.</p>
+            <p class="lead" data-i18n="heroLead">
+              Chaque balle, roquette et rayon laser creuse le décor en temps réel : le sable s'écoule,
+              les structures s'effondrent, et vous construisez murs et planchers en plein duel.
+              Duels 1v1, salons jusqu'à 8 joueurs, survie solo et co-op — directement dans le navigateur.
+            </p>
+            <div class="hero-ctas">
+              <a class="btn btn-primary btn-lg" href="https://neon-rift-0we0.onrender.com/" target="_blank" rel="noopener" data-i18n="ctaPlayNow">▶ Jouer maintenant</a>
+              <a class="btn btn-ghost btn-lg" href="https://github.com/Sergio744/Neon-Rift" target="_blank" rel="noopener" data-i18n="ctaStar">★ Voir sur GitHub</a>
+            </div>
+            <p class="hero-note" data-i18n="heroNote">Aucun téléchargement · Aucune inscription · AZERTY &amp; QWERTY natifs</p>
+          </div>
+          <div class="hero-art">
+            <img src="assets/icon-512.png" alt="Neon Rift — stickman pixel-art cyan au jetpack doré, blaster rose et faille Rift" width="512" height="512" />
+            <p class="hero-caption" data-i18n="heroCaption">Neon Cyan <span class="vs">vs</span> Rift Magenta</p>
+          </div>
+        </div>
+        <div class="wrap stats" role="list">
+          <div class="stat" role="listitem"><strong>8</strong><span data-i18n="statMaps">arènes destructibles</span></div>
+          <div class="stat" role="listitem"><strong>8</strong><span data-i18n="statPlayers">joueurs par salon</span></div>
+          <div class="stat" role="listitem"><strong>4</strong><span data-i18n="statModes">modes de jeu</span></div>
+          <div class="stat" role="listitem"><strong>0 €</strong><span data-i18n="statPrice">sans pub, sans pay-to-win</span></div>
+        </div>
+      </section>
+
+      <!-- ============ MODES ============ -->
+      <section class="section" id="modes">
+        <div class="wrap">
+          <p class="kicker" data-i18n="modesKicker">MODES DE JEU</p>
+          <h2 data-i18n="modesTitle">Choisis ton combat</h2>
+          <p class="section-lead" data-i18n="modesLead">Quatre façons de jouer, en ligne ou hors ligne, seul ou entre amis.</p>
+          <div class="grid grid-4">
+            <article class="card">
+              <span class="card-ico" aria-hidden="true">⚔️</span>
+              <h3 data-i18n="mode1t">Duels 1v1</h3>
+              <p data-i18n="mode1d">Matchmaking instantané ou salon privé par code à 4 lettres. Score et arsenal personnalisables.</p>
+              <span class="tag">1v1</span>
+            </article>
+            <article class="card">
+              <span class="card-ico" aria-hidden="true">👥</span>
+              <h3 data-i18n="mode2t">Salons de groupe</h3>
+              <p data-i18n="mode2d">Chacun pour soi ou match à mort par équipes sur de grandes arènes. Rejoignables en cours de partie.</p>
+              <span class="tag">2–8</span>
+            </article>
+            <article class="card">
+              <span class="card-ico" aria-hidden="true">🤖</span>
+              <h3 data-i18n="mode3t">Survie solo</h3>
+              <p data-i18n="mode3d">Vagues de bots de plus en plus coriaces, 100 % hors ligne dans le navigateur. Une arme débloquée par vague.</p>
+              <span class="tag">SOLO</span>
+            </article>
+            <article class="card">
+              <span class="card-ico" aria-hidden="true">🛡️</span>
+              <h3 data-i18n="mode4t">Survie co-op</h3>
+              <p data-i18n="mode4d">Survis en ligne avec ton équipe : vies partagées, réanimations et largages d'armurerie progressifs.</p>
+              <span class="tag">2–4</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MAPS ============ -->
+      <section class="section section-alt" id="maps">
+        <div class="wrap">
+          <p class="kicker" data-i18n="mapsKicker">ARÈNES</p>
+          <h2 data-i18n="mapsTitle">8 mondes à détruire</h2>
+          <p class="section-lead" data-i18n="mapsLead">Physique falling-sand : tout ce qui n'est pas bedrock peut être creusé, brûlé ou fait s'effondrer.</p>
+          <div class="grid grid-4 maps-grid">
+            <article class="map-card"><div class="map-thumb thumb-neon" aria-hidden="true"></div><h3>NEON CITY</h3><p data-i18n="mapNeon">Arène signature : gratte-ciels jumeaux, passerelles néon et réacteur Rift central. Parfaite pour les duels.</p><span class="tag">1v1</span></article>
+            <article class="map-card"><div class="map-thumb thumb-hotel" aria-hidden="true"></div><h3>GRAND HOTEL</h3><p data-i18n="mapHotel">55 étages verticaux, chambres vitrées et combats de haut en bas. Montez, descendez, détruisez.</p><span class="tag">55 ÉTAGES</span></article>
+            <article class="map-card"><div class="map-thumb thumb-jungle" aria-hidden="true"></div><h3>AMAZON JUNGLE</h3><p data-i18n="mapJungle">Grande carte luxuriante, canopée et rivières. Idéale pour les salons jusqu'à 8 joueurs.</p><span class="tag">8 JOUEURS</span></article>
+            <article class="map-card"><div class="map-thumb thumb-landing" aria-hidden="true"></div><h3>LANDING PAGE</h3><p data-i18n="mapLanding">L'arène d'atterrissage classique, équilibrée et lisible pour débuter.</p><span class="tag">CLASSIQUE</span></article>
+            <article class="map-card"><div class="map-thumb thumb-ridge" aria-hidden="true"></div><h3>DUSK RIDGE</h3><p data-i18n="mapRidge">Crêtes au crépuscule, combats verticaux et longues lignes de vue.</p><span class="tag">VERTICALE</span></article>
+            <article class="map-card"><div class="map-thumb thumb-mine" aria-hidden="true"></div><h3>THE MINE</h3><p data-i18n="mapMine">Galeries souterraines étroites : embuscades, effondrements et combats au corps à corps.</p><span class="tag">SOUTERRAINE</span></article>
+            <article class="map-card"><div class="map-thumb thumb-canyon" aria-hidden="true"></div><h3>RED CANYON</h3><p data-i18n="mapCanyon">Canyon rouge immense, falaises destructibles et traversées risquées.</p><span class="tag">IMMENSE</span></article>
+            <article class="map-card"><div class="map-thumb thumb-outpost" aria-hidden="true"></div><h3>OUTPOST</h3><p data-i18n="mapOutpost">Avant-poste compact, parfait pour des matchs rapides et nerveux.</p><span class="tag">COMPACTE</span></article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ WEAPONS ============ -->
+      <section class="section" id="armes">
+        <div class="wrap">
+          <p class="kicker" data-i18n="weapKicker">ARSENAL RIFT</p>
+          <h2 data-i18n="weapTitle">Des armes qui tordent la réalité</h2>
+          <p class="section-lead" data-i18n="weapLead">Trois armes exclusives Neon Rift, plus les classiques du genre — pistolet, SMG, shotgun, roquette, railgun, lance-flammes, C4, sniper, AK-47 et constructeur.</p>
+          <div class="grid grid-3">
+            <article class="card card-rift">
+              <span class="card-ico" aria-hidden="true">🌀</span>
+              <h3>BLINK DISC</h3>
+              <p data-i18n="weapBlink">Disque de phase : téléporte-toi à l'impact, ou en plein vol (clic droit / G / E) pour recharger ton double saut et libérer une onde de choc sans auto-dégâts.</p>
+            </article>
+            <article class="card card-rift">
+              <span class="card-ico" aria-hidden="true">🔺</span>
+              <h3>PRISM RIFLE</h3>
+              <p data-i18n="weapPrism">Laser cristallin qui rebondit jusqu'à 3 fois sur les murs (+15 % de dégâts par ricochet), avec aperçu du premier rebond.</p>
+            </article>
+            <article class="card card-rift">
+              <span class="card-ico" aria-hidden="true">🕳️</span>
+              <h3>VORTEX ORB</h3>
+              <p data-i18n="weapVortex">Orbe de matière noire : s'ancre en singularité gravitationnelle, soulève et aspire les ennemis avant d'imploser.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ JOUER ============ -->
+      <section class="section section-alt" id="jouer">
+        <div class="wrap">
+          <p class="kicker" data-i18n="playKicker">COMMENT JOUER</p>
+          <h2 data-i18n="playTitle">En jeu en 30 secondes</h2>
+          <div class="grid grid-3 steps">
+            <article class="card step"><span class="step-n" aria-hidden="true">1</span><h3 data-i18n="step1t">Ouvre le jeu</h3><p data-i18n="step1d">Un clic sur le lien, aucun téléchargement. Le serveur gratuit peut mettre ~20 secondes à se réveiller après une pause.</p></article>
+            <article class="card step"><span class="step-n" aria-hidden="true">2</span><h3 data-i18n="step2t">Choisis ton mode</h3><p data-i18n="step2d">1v1, groupe, survie solo ou co-op — puis la carte et l'arsenal qui te ressemblent.</p></article>
+            <article class="card step"><span class="step-n" aria-hidden="true">3</span><h3 data-i18n="step3t">Détruis &amp; construis</h3><p data-i18n="step3d">Creuse le décor, pose des murs et des sols en plein duel, et reprends l'avantage.</p></article>
+          </div>
+          <div class="controls">
+            <h3 data-i18n="controlsTitle">🕹️ Contrôles — AZERTY &amp; QWERTY natifs</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th data-i18n="thKey">Touche</th><th data-i18n="thAction">Action</th></tr></thead>
+                <tbody>
+                  <tr><td><kbd>Q</kbd>/<kbd>D</kbd> <span class="dim">(AZERTY)</span> · <kbd>A</kbd>/<kbd>D</kbd> <span class="dim">(QWERTY)</span></td><td data-i18n="cRun">Courir (<kbd>Shift</kbd> = sprint)</td></tr>
+                  <tr><td><kbd>Espace</kbd></td><td data-i18n="cJump">Saut · double saut en l'air · jetpack en maintenant</td></tr>
+                  <tr><td><kbd>S</kbd></td><td data-i18n="cFall">Chute rapide / descendre d'une plateforme</td></tr>
+                  <tr><td><kbd>Clic gauche</kbd></td><td data-i18n="cShoot">Tirer / poser une construction</td></tr>
+                  <tr><td><kbd>Clic droit</kbd> <span class="dim">(ou</span> <kbd>G</kbd>/<kbd>E</kbd><span class="dim">)</span></td><td data-i18n="cAlt">Grenade / Blink en vol / détoner le C4</td></tr>
+                  <tr><td><kbd>1</kbd>–<kbd>9</kbd>, <kbd>molette</kbd></td><td data-i18n="cSwap">Changer d'arme</td></tr>
+                  <tr><td><kbd>F</kbd></td><td data-i18n="cMelee">Coup d'épaule (brise le décor et repousse)</td></tr>
+                  <tr><td><kbd>B</kbd> + <kbd>T</kbd></td><td data-i18n="cBuild">Construction (mur / sol, <kbd>T</kbd> = matériau)</td></tr>
+                  <tr><td><kbd>Tab</kbd> · <kbd>H</kbd> · <kbd>M</kbd></td><td data-i18n="cMisc">Scores · aide des touches · couper le son</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="center"><a class="btn btn-primary btn-lg" href="https://neon-rift-0we0.onrender.com/" target="_blank" rel="noopener" data-i18n="ctaPlayNow2">▶ Jouer maintenant — c'est gratuit</a></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ OPEN SOURCE ============ -->
+      <section class="section" id="opensource">
+        <div class="wrap">
+          <p class="kicker" data-i18n="ossKicker">OPEN SOURCE</p>
+          <h2 data-i18n="ossTitle">Construit par la communauté</h2>
+          <p class="section-lead" data-i18n="ossLead">Zéro monétisation, 100 % fun. Forke le projet, propose tes idées, ou héberge ton propre serveur.</p>
+          <div class="grid grid-3">
+            <article class="card"><span class="card-ico" aria-hidden="true">🍴</span><h3 data-i18n="oss1t">Fork &amp; lance</h3><p data-i18n="oss1d">Clone le repo, <code>npm install</code>, puis <code>npm run dev</code> : le jeu tourne en local sur <code>localhost:3030</code>.</p></article>
+            <article class="card"><span class="card-ico" aria-hidden="true">🤝</span><h3 data-i18n="oss2t">Contribue</h3><p data-i18n="oss2d">Nouvelles armes, cartes destructibles, modes ou effets néon : le guide <code>CONTRIBUTING.md</code> t'explique tout, pas à pas.</p></article>
+            <article class="card"><span class="card-ico" aria-hidden="true">🚀</span><h3 data-i18n="oss3t">Héberge</h3><p data-i18n="oss3d">Render, Docker, Fly.io, Railway ou VPS : le guide <code>DEPLOY.md</code> couvre l'hébergement gratuit, clé en main.</p></article>
+          </div>
+          <pre class="code" aria-label="Commandes"><code>git clone https://github.com/Sergio744/Neon-Rift.git
+cd Neon-Rift
+npm install
+npm run dev   # http://localhost:3030
+npm test      # suite de tests automatisée</code></pre>
+          <div class="oss-links">
+            <a class="btn btn-ghost" href="https://github.com/Sergio744/Neon-Rift/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" data-i18n="linkContrib">🤝 CONTRIBUTING</a>
+            <a class="btn btn-ghost" href="https://github.com/Sergio744/Neon-Rift/blob/main/ROADMAP.md" target="_blank" rel="noopener" data-i18n="linkRoadmap">🗺️ ROADMAP</a>
+            <a class="btn btn-ghost" href="https://github.com/Sergio744/Neon-Rift/blob/main/DEPLOY.md" target="_blank" rel="noopener" data-i18n="linkDeploy">🚀 DEPLOY</a>
+            <a class="btn btn-ghost" href="https://github.com/Sergio744/Neon-Rift/issues" target="_blank" rel="noopener" data-i18n="linkIssues">💬 Issues</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ CREDITS ============ -->
+      <section class="section section-alt" id="credits">
+        <div class="wrap credits-in">
+          <p class="kicker" data-i18n="credKicker">CRÉDITS</p>
+          <h2 data-i18n="credTitle">Inspiré de Stick Duel</h2>
+          <p data-i18n="credBody">
+            Neon Rift est inspiré et dérivé de <strong>Stick Duel</strong>, créé par
+            <a href="https://melvynx.com" target="_blank" rel="noopener"><strong>Melvynx</strong></a>
+            (<a href="https://game.melvynx.dev" target="_blank" rel="noopener">game.melvynx.dev</a> ·
+            <a href="https://github.com/Melvynx/stick-duel" target="_blank" rel="noopener">code source</a>),
+            avec son accord explicite pour utiliser, modifier et redistribuer le code, héberger une version
+            multijoueur gratuite et laisser la communauté contribuer et forker.
+          </p>
+          <p data-i18n="credBody2">
+            Il s'agit d'un <strong>projet communautaire indépendant</strong> : ce n'est <strong>pas</strong> un projet
+            officiel de Melvynx ou de sa chaîne. Le code est publié sous
+            <a href="https://github.com/Sergio744/Neon-Rift/blob/main/LICENSE" target="_blank" rel="noopener"><strong>licence MIT</strong></a>
+            — voir <a href="https://github.com/Sergio744/Neon-Rift/blob/main/NOTICE.md" target="_blank" rel="noopener">NOTICE.md</a>
+            et <a href="https://github.com/Sergio744/Neon-Rift/blob/main/THIRD_PARTY_LICENSES.md" target="_blank" rel="noopener">THIRD_PARTY_LICENSES.md</a>.
+          </p>
+          <p class="center"><a class="btn btn-primary btn-lg" href="https://neon-rift-0we0.onrender.com/" target="_blank" rel="noopener" data-i18n="ctaPlayNow3">▶ Rejoindre la Rift</a></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-in">
+        <p><strong>NEON RIFT</strong> — <span data-i18n="footTag">jeu stickman destructible, gratuit &amp; open-source (MIT)</span></p>
+        <nav aria-label="Pied de page">
+          <a href="https://neon-rift-0we0.onrender.com/" target="_blank" rel="noopener" data-i18n="footPlay">Jouer</a>
+          <a href="https://github.com/Sergio744/Neon-Rift" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/Sergio744/Neon-Rift/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
+          <a href="https://melvynx.com" target="_blank" rel="noopener">Melvynx</a>
+        </nav>
+        <p class="dim">© <span id="year">2026</span> Sergio744 &amp; Neon Rift Contributors · <span data-i18n="footNote">Inspiré de Stick Duel — projet non officiel.</span></p>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
