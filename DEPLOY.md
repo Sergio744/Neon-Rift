@@ -12,7 +12,7 @@
 Unlike static websites, **Neon Rift** runs a **stateful 60 Hz Node.js + WebSocket (`/ws`) server** where active rooms (`?room=ABCD`), matchmaking queues, and destructible maps live in memory.
 
 Therefore:
-1. **Do NOT use serverless/static-only hosts** (like GitHub Pages, Netlify static, or Vercel Functions) — they terminate persistent WebSocket loops.
+1. **Do NOT use serverless/static-only hosts** (like GitHub Pages, Netlify static, or Vercel Functions) — they terminate persistent WebSocket loops. *(Exception: this repo's [`docs/`](../docs) landing page is a static presentation page served via GitHub Pages — it only links to the live game, it does not run the game itself.)*
 2. **Keep `1` instance (`max instances = 1`)**: do not horizontally scale to multiple replicas behind a round-robin load balancer, so friends sharing a 4-letter room code always land on the exact same Node.js process!
 3. The server is ultra-lightweight (`~40–70 MB` RAM for dozens of concurrent players), so **free container tiers run it effortlessly**.
 
